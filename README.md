@@ -1,2 +1,3 @@
 # spotted-zebra
-fixed-coupon-note pricer
+
+A fixed coupon note pricer.
