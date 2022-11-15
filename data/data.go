@@ -98,10 +98,6 @@ type Overview struct {
 // get the tickers that have options trading in market
 func GetTickers(stocks []string) (map[string][]string, error) {
 	tickersMap := map[string][]string{}
-	// stocks, err := tickers("tickers.json")
-	// if err != nil {
-	// 	return nil, err
-	// }
 	var tickerArr []Tickers
 	var stockArr []string
 	ch := make(chan Tickers, len(stocks))
@@ -255,10 +251,6 @@ func Calibrate(stocks []string) (map[string]m.Model, error) {
 	}
 
 	modelsMap := make(map[string]m.Model)
-	// stocks, err := tickers("tickers.json")
-	// if err != nil {
-	// 	return nil, err
-	// }
 	ch := make(chan m.Model, len(data))
 	stocksCh := make(chan string, len(data))
 	defer close(ch)
@@ -289,11 +281,6 @@ func Calibrate(stocks []string) (map[string]m.Model, error) {
 
 // get the correlation matrix
 func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, map[string]float64, error) {
-	// stocks, err := tickers("tickers.json")
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	ch := make(chan map[string]Hist, len(stocks))
 	stockch := make(chan string, len(stocks))
 	defer close(ch)
@@ -358,11 +345,6 @@ func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, map[string]float64, 
 // assgin index to every stocks
 func stockIndex(stocks []string) map[string]int {
 	result := map[string]int{}
-	// stocks, err := tickers("tickers.json")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(-1)
-	// }
 	for i, v := range stocks {
 		result[v] = i
 	}
@@ -387,24 +369,8 @@ func Corr(stocks []string, matrix *mat.SymDense, s1, s2 string) (float64, error)
 	return matrix.At(idx1, idx2), nil
 }
 
-// // helper function to open tickers.json
-// func tickers(filename string) ([]string, error) {
-// 	details := TickersArr{}
-// 	file, err := os.ReadFile(filename)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	err = json.Unmarshal([]byte(file), &details)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	sort.Strings(details.Tickers)
-// 	for s := 0; s < len(details.Tickers); s++ {
-// 		details.Tickers[s] = strings.ToUpper(details.Tickers[s])
-// 	}
-// 	return details.Tickers, nil
-// }
-
+// helper function to get the http request and store into struct
+// input: link, and the target struct type
 func getPolygon[DataType TickerDetails | Tickers | Hist](url string, target DataType) (result DataType, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Authorization", `Bearer 3X8wQrb0pH9gaNJvY__sq1UohDdHfVt3`)
@@ -529,7 +495,6 @@ func minLength(data [][]float64) int {
 		return min
 	}
 	for i := 1; i < len(data); i++ {
-		// fmt.Println(min, len(data[i]))
 		if len(data[i]) < min {
 			min = len(data[i])
 		}

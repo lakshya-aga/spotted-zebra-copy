@@ -82,18 +82,16 @@ func main() {
 		os.Exit(-1)
 	}
 
-	// fmt.Println(path)
+	// get the worst of performance array
 	var wop []float64
 	p := make([]float64, len(spotref))
 	for i := range dates["mcdates"] {
 		j := 0
 		for k := range spotref {
-			// Scale MC path values by spot reference
 			p[j] = path[k][i]
 			j++
 		}
 		minP := utils.MinSlice(p)
-		// fmt.Println(p, minP)
 		wop = append(wop, minP)
 	}
 
