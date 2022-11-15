@@ -21,14 +21,15 @@ type Basket []Stock
 type MCPath map[string][]float64
 
 type BasketList struct {
-	Stocks     []string          `json:"stocks"`
-	Parameter  map[string]Model `json:"model_parameters"`
-	Index      map[string]int    `json:"corr_id"`
-	CorrMatrix []float64       `json:"corr_matrix"`
-	Mean       []float64         `json:"mean"`
+	Stocks     []string           `json:"stocks"`
+	Parameter  map[string]Model   `json:"model_parameters"`
+	Index      map[string]int     `json:"corr_id"`
+	CorrMatrix []float64          `json:"corr_matrix"`
+	Mean       []float64          `json:"mean"`
+	SpotPrice  map[string]float64 `json:"spot_price"`
 }
 
-func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric) (MCPath, error) {
+func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric, pxRatio []float64) (MCPath, error) {
 	nAssets := len(b)
 	n := len(obsdates) - 1
 
@@ -54,7 +55,7 @@ func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric) (MC
 	}
 	x := make(map[string][]float64)
 	for i, v := range b {
-		x[v.Ticker] = b[i].Model.Path(dt, z[i])
+		x[v.Ticker] = b[i].Model.Path(pxRatio[i], dt, z[i])
 	}
 	return x, nil
 }

@@ -1,11 +1,9 @@
 package payoff
 
 import (
-	"main/mc"
+	"fmt"
 	"math"
 	"time"
-
-	"main/utils"
 )
 
 type FCN struct {
@@ -51,49 +49,41 @@ func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki float64, T, freq int
 	return &f, nil
 }
 
-func (f *FCN) Payout(path mc.MCPath, spotref map[string]float64) float64 {
-	// p holds prices at any obs t
-	p := make([]float64, len(spotref))
-	var j, count int
-	var minP float64
-
+func (f *FCN) Payout(path []float64) float64 {
+	var count int
 	out := 1.0
+	T := len(path) - 1
 
 	// Initialise KI flag
 	isKI := false
 	for i, t := range f.ObsDates {
-		factor := float64(count+1) / 12.0
-		// Populate slice of prices
-		j = 0
-		for k, v := range spotref {
-			// Scale MC path values by spot reference
-			p[j] = v * path[k][i]
-			j++
-		}
-		// Compute worst of performance
-		minP = utils.MinSlice(p)
+		factor := 1 / 12.0
 		// Check for KO and redeem if required
 		// Coupon dates coincide with KO dates, so pay coupon if required
 		if t.Equal(f.KODates[count]) {
 			out += factor * f.FixedCoupon
-			if minP > f.BarrierCoupon {
+			fmt.Printf("fixed coupon: %0.9f\n", factor*f.FixedCoupon)
+			if path[i] > f.BarrierCoupon {
 				out += factor * f.BarrierCoupon
+				fmt.Printf("barrier coupon: %0.9f\n", factor*f.BarrierCoupon)
 			}
-			if minP > f.KO {
-				out += factor * f.Coupon
+			if path[i] > f.KO {
+				out += float64(count+1) * factor * f.Coupon
+				fmt.Printf("knock-out coupon: %0.9f\n", float64(count+1)*factor*f.Coupon)
 				return out
 			}
 			count++
 		}
 
 		if !f.IsEuroKI && !isKI {
-			if minP < f.KI {
+			if path[i] < f.KI {
 				isKI = true
 			}
 		}
 	}
-	if isKI || (f.IsEuroKI && minP < f.KI) {
-		out = -1.0 / f.Strike * math.Max(f.Strike-minP, 0)
+	if isKI || (f.IsEuroKI && path[T] < f.KI) {
+		out += (-1.0 / f.Strike) * math.Max(f.Strike-path[T], 0)
+		fmt.Printf("knock-in: %0.9f\n", -1.0/f.Strike*math.Max(f.Strike-path[T], 0))
 	}
 	return out
 }

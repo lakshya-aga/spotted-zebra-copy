@@ -16,12 +16,12 @@ type HypHyp struct {
 // Simulate a HypHyp model price path for a given vector of timesteps and stock price normal variates.
 // The normal variates are used when it is required to generated correlated price paths of two or more assets.
 // For a single price path z1 should be nil.
-func (m HypHyp) Path(dt, z1 []float64) []float64 {
+func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
 	var f, g, y, u, x float64
 	N := len(dt)
 	// Initialise price path
 	r := make([]float64, N+1)
-	r[0] = 0.0
+	r[0] = math.Log(pxRatio)
 	// Pre compute some repeated constants used in SDE
 	a := 0.5 * m.Sigma * m.Sigma
 	b1 := m.Beta

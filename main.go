@@ -17,16 +17,11 @@ const Layout = "2006-01-02"
 func main() {
 	stocks := []string{"AAPL", "TSLA", "META"}
 	stocks = format(stocks)
-	spotref := make(map[string]float64)
 
 	modelsMap, err := data.Calibrate(stocks)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
-	}
-
-	for k := range modelsMap {
-		spotref[k] = 1.0
 	}
 
 	bsk, err := mc.NewBasket(modelsMap)
@@ -35,7 +30,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	mu, corrMatrix, err := data.CorrMatrix(stocks)
+	mu, corrMatrix, spotref, err := data.CorrMatrix(stocks)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
@@ -81,21 +76,37 @@ func main() {
 		os.Exit(-1)
 	}
 
-	path, err := bsk.Path(dates["mcdates"], mu, corrMatrix)
+	path, err := bsk.Path(dates["mcdates"], mu, corrMatrix, []float64{1.0, 1.0, 1.0})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
 	}
 
+	// fmt.Println(path)
+	var wop []float64
+	p := make([]float64, len(spotref))
+	for i := range dates["mcdates"] {
+		j := 0
+		for k := range spotref {
+			// Scale MC path values by spot reference
+			p[j] = path[k][i]
+			j++
+		}
+		minP := utils.MinSlice(p)
+		// fmt.Println(p, minP)
+		wop = append(wop, minP)
+	}
+
+	fmt.Println(wop)
 	strike := 0.80
 	cpn := 0.10
-	barrierCpn := 0.00
-	fixCpn := 0.00
+	barrierCpn := 0.10
+	fixCpn := 0.10
 	KO := 1.05
-	KI := 0.70
+	KI := 0.40
 	maturity := 6
 	freq := 1
-	isEuro := true
+	isEuro := false
 
 	fcn, err := payoff.NewFCN(stocks, strike, cpn, barrierCpn, fixCpn, KO, KI, maturity, freq, isEuro, dates)
 	if err != nil {
@@ -103,7 +114,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	pay := fcn.Payout(path, spotref)
+	pay := fcn.Payout(wop)
 	fmt.Println(pay)
 }
 

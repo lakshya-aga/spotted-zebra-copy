@@ -10,7 +10,7 @@ import (
 // Model interface to be satisfied by option pricing model types.
 type Model interface {
 	//Compute a price path under model
-	Path([]float64, []float64) []float64
+	Path(float64, []float64, []float64) []float64
 	//Compute implied vol under the model
 	IVol(float64, float64) float64
 	//Get transformed model parameters. Return parameters mapped to the domain (-Inf, Inf)

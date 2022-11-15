@@ -288,7 +288,7 @@ func Calibrate(stocks []string) (map[string]m.Model, error) {
 }
 
 // get the correlation matrix
-func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, error) {
+func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, map[string]float64, error) {
 	// stocks, err := tickers("tickers.json")
 	// if err != nil {
 	// 	return nil, err
@@ -318,8 +318,7 @@ func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, error) {
 	var rxArr [][]float64
 	mu := map[string]float64{}
 	var muArr []float64
-	// spot := map[string]float64{}
-	// var spotPrice []float64
+	spotRef := map[string]float64{}
 	for k, v := range stockpx {
 		var px []float64
 		var rt []float64
@@ -340,6 +339,7 @@ func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, error) {
 		}
 		rx[k] = rt
 		mu[k] = total_rt / float64(len(rt))
+		spotRef[k], _ = strconv.ParseFloat(v[dateArr[0].String()].Close, 64)
 		rxArr = append(rxArr, rt)
 	}
 	minLength := minLength(rxArr)
@@ -352,7 +352,7 @@ func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, error) {
 	var corr mat.SymDense
 	stat.CorrelationMatrix(&corr, data, nil)
 	corrMatrix := &corr
-	return muArr, corrMatrix, nil
+	return muArr, corrMatrix, spotRef, nil
 }
 
 // assgin index to every stocks
