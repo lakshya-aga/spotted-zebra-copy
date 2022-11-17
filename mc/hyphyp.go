@@ -2,9 +2,7 @@ package mc
 
 import (
 	"math"
-	"time"
 
-	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
@@ -16,7 +14,7 @@ type HypHyp struct {
 // Simulate a HypHyp model price path for a given vector of timesteps and stock price normal variates.
 // The normal variates are used when it is required to generated correlated price paths of two or more assets.
 // For a single price path z1 should be nil.
-func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
+func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, d distuv.Normal) []float64 {
 	var f, g, y, u, x float64
 	N := len(dt)
 	// Initialise price path
@@ -27,7 +25,7 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
 	b1 := m.Beta
 	b2 := b1 * b1
 	// Initialise Std Normal generator
-	d := distuv.Normal{Mu: 0.0, Sigma: 1.0, Src: rand.NewSource(uint64(time.Now().UnixNano()))}
+	// d := distuv.Normal{Mu: 0.0, Sigma: 1.0, Src: rand.NewSource(uint64(time.Now().UnixNano()))}
 	// We need two correlated std normal variates for path simulation. If the normal variate for the stock price SDE is not given, generate it here.
 	if z1 == nil {
 		z1 = make([]float64, N)
@@ -38,7 +36,8 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
 	// Generate the state variable SDE normal variate
 	z2 := make([]float64, N)
 	for i := range z2 {
-		z2[i] = m.Rho*z1[i] + math.Sqrt(1.0-m.Rho*m.Rho)*d.Rand()
+		z2[i] = m.Rho*z1[i]*math.Sqrt(dt[i]) + math.Sqrt(1.0-m.Rho*m.Rho)*math.Sqrt(dt[i])*d.Rand()
+		// fmt.Println(z1[i], z2[i])
 	}
 
 	// Generate Euler-Mauryama path for log price
@@ -47,7 +46,7 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
 		f = ((1.0-b1+b2)*x + (b1-1)*(math.Sqrt(x*x+b2*(1.0-x)*(1.0-x))-b1)) / b1
 		g = y + math.Sqrt(y*y+1.0)
 		u = f * g / x
-		r[i+1] = r[i] - a*dt[i]*u*u + u*math.Sqrt(dt[i])*z1[i]
+		r[i+1] = r[i] - a*dt[i]*u*u + m.Sigma*u*math.Sqrt(dt[i])*z1[i]
 		y = y*math.Exp(-m.Kappa*dt[i]) + m.Alpha*math.Sqrt(1.0-math.Exp(-2.0*m.Kappa*dt[i]))*z2[i] //*math.Sqrt(dt[i])
 	}
 	// Convert log price to price
@@ -64,20 +63,20 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64) []float64 {
 
 // Constructor for HypHyp model
 func NewHypHyp() HypHyp {
-	return HypHyp{Sigma: 0.40, Alpha: 0.01, Beta: 0.01, Rho: 0.0, Kappa: 5.0}
+	return HypHyp{Sigma: 0.40, Alpha: 0.55, Beta: 0.55, Rho: 0.0, Kappa: 5.0}
 }
 
 // Get transformed parameters. Return parameters transformed to the domain (-Inf, Inf).
 func (m HypHyp) Get() []float64 {
 	p := make([]float64, 5)
-	p[0], p[1], p[2], p[3] = math.Log(m.Sigma), math.Log(m.Alpha), math.Log(m.Beta), math.Log(m.Kappa)
+	p[0], p[1], p[2], p[3] = math.Log(m.Sigma), math.Log((2.0*m.Alpha-1.0)/(3.0-(2*m.Alpha))), math.Log((2.0*m.Beta-1.0)/(3.0*(2.0*m.Beta))), math.Log(m.Kappa)
 	p[4] = math.Atanh(m.Rho)
 	return p
 }
 
 // Create a model for the given transformed parameters
 func (m HypHyp) Set(p []float64) Model {
-	m.Sigma, m.Alpha, m.Beta, m.Kappa = math.Exp(p[0]), math.Exp(p[1]), math.Exp(p[2]), math.Exp(p[4])
+	m.Sigma, m.Alpha, m.Beta, m.Kappa = math.Exp(p[0]), 1.0/2.0+1.0/(1.0+math.Exp(-p[1])), 1.0/2.0+1.0/(1.0+math.Exp(-p[2])), math.Exp(p[4])
 	m.Rho = math.Tanh(p[4])
 	return m
 }

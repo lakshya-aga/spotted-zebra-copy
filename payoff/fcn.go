@@ -1,7 +1,7 @@
 package payoff
 
 import (
-	"fmt"
+	"main/mc"
 	"math"
 	"time"
 )
@@ -14,6 +14,7 @@ type FCN struct {
 	FixedCoupon   float64
 	KO            float64
 	KI            float64
+	KC            float64
 	Maturity      int
 	CallFreq      int
 	IsEuroKI      bool
@@ -22,9 +23,30 @@ type FCN struct {
 	KIDates       []time.Time
 }
 
+type FCNOutput struct {
+	Date          string              `json:"date"`
+	Tickers       float64             `json:"underlying_tickers"`
+	Strike        float64             `json:"strike"`
+	Maturity      int                 `json:"maturity"`
+	CallFreq      int                 `json:"autocall_frequency"`
+	IsEuro        bool                `json:"is_euro"`
+	KO            float64             `json:"knock_out_barrier"`
+	KI            float64             `json:"knock_in_barrier"`
+	KC            float64             `json:"coupon_barrier"`
+	AutoCoupon    float64             `json:"autocall_coupon_rates"`
+	BarrierCoupon float64             `json:"barrier_coupon_rates"`
+	FixedCoupon   float64             `json:"fixed_coupon_rates"`
+	Price         float64             `json:"price"`
+	SpotPrice     map[string]float64  `json:"spot_price"`
+	Parameter     map[string]mc.Model `json:"model_parameters"`
+	Index         map[string]int      `json:"corr_id"`
+	CorrMatrix    []float64           `json:"corr_matrix"`
+	Mean          []float64           `json:"mean"`
+}
+
 const Layout = "2006-01-02"
 
-func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki float64, T, freq int, isEuro bool, m map[string][]time.Time) (*FCN, error) {
+func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, m map[string][]time.Time) (*FCN, error) {
 	var kidates []time.Time
 	if isEuro {
 		kidates = []time.Time{m["mcdates"][len(m["mcdates"])-1]}
@@ -39,6 +61,7 @@ func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki float64, T, freq int
 		FixedCoupon:   fixCpn,
 		KO:            ko,
 		KI:            ki,
+		KC:            kc,
 		Maturity:      T,
 		CallFreq:      freq,
 		IsEuroKI:      isEuro,
@@ -61,16 +84,19 @@ func (f *FCN) Payout(path []float64) float64 {
 		// Check for KO and redeem if required
 		// Coupon dates coincide with KO dates, so pay coupon if required
 		if t.Equal(f.KODates[count]) {
+			// fmt.Printf("At %v\n", t.Format(Layout))
 			out += factor * f.FixedCoupon
-			fmt.Printf("fixed coupon: %0.9f\n", factor*f.FixedCoupon)
-			if path[i] > f.BarrierCoupon {
+			// fmt.Printf("fixed coupon: %0.9f\n", factor*f.FixedCoupon)
+			if path[i] > f.KC {
 				out += factor * f.BarrierCoupon
-				fmt.Printf("barrier coupon: %0.9f\n", factor*f.BarrierCoupon)
+				// fmt.Printf("barrier coupon: %0.9f\n", factor*f.BarrierCoupon)
 			}
 			if path[i] > f.KO {
 				out += float64(count+1) * factor * f.Coupon
-				fmt.Printf("knock-out coupon: %0.9f\n", float64(count+1)*factor*f.Coupon)
-				return out
+				// fmt.Printf("knock-out coupon: %0.9f\n", float64(count+1)*factor*f.Coupon)
+				dt := float64(t.Unix()-f.ObsDates[0].Unix()) / float64(60*60*24*365)
+				// dt := t.Sub(f.ObsDates[0]).Seconds()
+				return math.Exp(-0.03*dt) * out
 			}
 			count++
 		}
@@ -83,7 +109,8 @@ func (f *FCN) Payout(path []float64) float64 {
 	}
 	if isKI || (f.IsEuroKI && path[T] < f.KI) {
 		out += (-1.0 / f.Strike) * math.Max(f.Strike-path[T], 0)
-		fmt.Printf("knock-in: %0.9f\n", -1.0/f.Strike*math.Max(f.Strike-path[T], 0))
+		// fmt.Printf("knock-in: %0.9f\n", -1.0/f.Strike*math.Max(f.Strike-path[T], 0))
 	}
-	return out
+	dt := float64(f.ObsDates[T].Unix()-f.ObsDates[0].Unix()) / float64(60*60*24*365)
+	return math.Exp(-0.03*dt) * out
 }

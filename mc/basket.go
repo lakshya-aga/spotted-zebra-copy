@@ -1,12 +1,10 @@
 package mc
 
 import (
-	"errors"
 	"time"
 
-	"golang.org/x/exp/rand"
-	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat/distmv"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // A stock is identified by its ticker and its calibrated model
@@ -29,15 +27,15 @@ type BasketList struct {
 	SpotPrice  map[string]float64 `json:"spot_price"`
 }
 
-func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric, pxRatio []float64) (MCPath, error) {
+func (b Basket) Path(obsdates []time.Time, pxRatio []float64, d *distmv.Normal, d2 distuv.Normal) (MCPath, error) {
 	nAssets := len(b)
 	n := len(obsdates) - 1
 
 	// Generate correlated std normal variates for stock SDE
-	d, ok := distmv.NewNormal(mu, corr, rand.NewSource(uint64(time.Now().UnixNano())))
-	if !ok {
-		return nil, errors.New("invalid corr matrix")
-	}
+	// d, ok := distmv.NewNormal(mu, corr, rand.NewSource(uint64(time.Now().UnixNano())))
+	// if !ok {
+	// 	return nil, errors.New("invalid corr matrix")
+	// }
 	z := make([][]float64, nAssets)
 	for i := 0; i < nAssets; i++ {
 		z[i] = make([]float64, n)
@@ -55,7 +53,7 @@ func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric, pxR
 	}
 	x := make(map[string][]float64)
 	for i, v := range b {
-		x[v.Ticker] = b[i].Model.Path(pxRatio[i], dt, z[i])
+		x[v.Ticker] = b[i].Model.Path(pxRatio[i], dt, z[i], d2)
 	}
 	return x, nil
 }
@@ -63,14 +61,10 @@ func (b Basket) Path(obsdates []time.Time, mu []float64, corr mat.Symmetric, pxR
 // Constructor for basket
 func NewBasket(modelsMap map[string]Model) (Basket, error) {
 	var b Basket
-	var err error
 
 	// Lookup calibrated model parameters
 	for k, v := range modelsMap {
 		//m, err = utils.GetModel(v)
-		if err != nil {
-			return nil, err
-		}
 		b = append(b, Stock{Ticker: k, Model: v})
 	}
 	return b, nil

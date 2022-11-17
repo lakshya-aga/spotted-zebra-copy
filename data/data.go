@@ -280,7 +280,7 @@ func Calibrate(stocks []string) (map[string]m.Model, error) {
 }
 
 // get the correlation matrix
-func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, map[string]float64, error) {
+func Statistics(stocks []string) ([]float64, *mat.SymDense, map[string]float64, error) {
 	ch := make(chan map[string]Hist, len(stocks))
 	stockch := make(chan string, len(stocks))
 	defer close(ch)
@@ -340,6 +340,38 @@ func CorrMatrix(stocks []string) ([]float64, *mat.SymDense, map[string]float64, 
 	stat.CorrelationMatrix(&corr, data, nil)
 	corrMatrix := &corr
 	return muArr, corrMatrix, spotRef, nil
+}
+
+// get the spot price
+func SpotPx(stocks []string) map[string]float64 {
+	ch := make(chan map[string]Hist, len(stocks))
+	stockch := make(chan string, len(stocks))
+	defer close(ch)
+	for i := 0; i < len(stocks); i++ {
+		go func(symbol string, ch chan map[string]Hist, stockch chan string) {
+			px, err := getAlphavantage(fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%v", symbol), AlphaData{})
+			if err != nil {
+				err = errors.New("in SpotPx(), http error: AlphaData{}")
+				fmt.Println(err)
+				os.Exit(-1)
+			}
+			ch <- px.Hist
+			stockch <- symbol
+		}(stocks[i], ch, stockch)
+	}
+	stockpx := map[string]map[string]Hist{}
+	for i := 0; i < len(stocks); i++ {
+		stockpx[<-stockch] = <-ch
+	}
+	spotRef := map[string]float64{}
+	for k, v := range stockpx {
+		dateArr := reflect.ValueOf(v).MapKeys()
+		sort.Slice(dateArr, func(i, j int) bool {
+			return dateArr[i].String() > dateArr[j].String()
+		})
+		spotRef[k], _ = strconv.ParseFloat(v[dateArr[0].String()].Close, 64)
+	}
+	return spotRef
 }
 
 // assgin index to every stocks
