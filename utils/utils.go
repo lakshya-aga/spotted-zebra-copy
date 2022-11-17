@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -153,4 +155,26 @@ func IsIn(t time.Time, ts []time.Time) bool {
 		}
 	}
 	return false
+}
+
+func Format(stocks []string) []string {
+	sort.Strings(stocks)
+	for s := 0; s < len(stocks); s++ {
+		stocks[s] = strings.ToUpper(stocks[s])
+	}
+	var unique []string
+
+	for _, v := range stocks {
+		skip := false
+		for _, u := range unique {
+			if v == u {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			unique = append(unique, v)
+		}
+	}
+	return unique
 }

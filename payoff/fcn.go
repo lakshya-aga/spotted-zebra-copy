@@ -1,8 +1,9 @@
 package payoff
 
 import (
-	"main/mc"
+	"encoding/json"
 	"math"
+	"os"
 	"time"
 )
 
@@ -24,24 +25,24 @@ type FCN struct {
 }
 
 type FCNOutput struct {
-	Date          string              `json:"date"`
-	Tickers       float64             `json:"underlying_tickers"`
-	Strike        float64             `json:"strike"`
-	Maturity      int                 `json:"maturity"`
-	CallFreq      int                 `json:"autocall_frequency"`
-	IsEuro        bool                `json:"is_euro"`
-	KO            float64             `json:"knock_out_barrier"`
-	KI            float64             `json:"knock_in_barrier"`
-	KC            float64             `json:"coupon_barrier"`
-	AutoCoupon    float64             `json:"autocall_coupon_rates"`
-	BarrierCoupon float64             `json:"barrier_coupon_rates"`
-	FixedCoupon   float64             `json:"fixed_coupon_rates"`
-	Price         float64             `json:"price"`
-	SpotPrice     map[string]float64  `json:"spot_price"`
-	Parameter     map[string]mc.Model `json:"model_parameters"`
-	Index         map[string]int      `json:"corr_id"`
-	CorrMatrix    []float64           `json:"corr_matrix"`
-	Mean          []float64           `json:"mean"`
+	StrikeDate    string             `json:"strike_date"`
+	Tickers       []string           `json:"underlying_tickers"`
+	Strike        float64            `json:"strike"`
+	Maturity      int                `json:"maturity"`
+	CallFreq      int                `json:"autocall_frequency"`
+	IsEuro        bool               `json:"is_euro"`
+	KO            float64            `json:"knock_out_barrier"`
+	KI            float64            `json:"knock_in_barrier"`
+	KC            float64            `json:"coupon_barrier"`
+	AutoCoupon    float64            `json:"autocall_coupon_rates"`
+	BarrierCoupon float64            `json:"barrier_coupon_rates"`
+	FixedCoupon   float64            `json:"fixed_coupon_rates"`
+	Price         float64            `json:"price"`
+	FixedPrice    map[string]float64 `json:"fixings"`
+	// Parameter     map[string]mc.Model `json:"model_parameters"`
+	// Index         map[string]int      `json:"corr_id"`
+	// CorrMatrix    []float64           `json:"corr_matrix"`
+	// Mean          []float64           `json:"mean"`
 }
 
 const Layout = "2006-01-02"
@@ -113,4 +114,33 @@ func (f *FCN) Payout(path []float64) float64 {
 	}
 	dt := float64(f.ObsDates[T].Unix()-f.ObsDates[0].Unix()) / float64(60*60*24*365)
 	return math.Exp(-0.03*dt) * out
+}
+
+func (f *FCN) Save(filename string, price float64, spotref map[string]float64) error {
+	output := FCNOutput{
+		StrikeDate:    time.Now().Format(Layout),
+		Tickers:       f.Tickers,
+		Strike:        f.Strike,
+		Maturity:      f.Maturity,
+		CallFreq:      f.CallFreq,
+		IsEuro:        f.IsEuroKI,
+		KO:            f.KO,
+		KI:            f.KI,
+		KC:            f.KC,
+		AutoCoupon:    f.Coupon,
+		BarrierCoupon: f.BarrierCoupon,
+		FixedCoupon:   f.FixedCoupon,
+		Price:         price,
+		FixedPrice:    spotref,
+	}
+
+	data, err := json.MarshalIndent(output, "", " ")
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
