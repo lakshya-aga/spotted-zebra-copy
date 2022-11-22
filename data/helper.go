@@ -148,6 +148,7 @@ func progressBar(length int) *progressbar.ProgressBar {
 	return bar
 }
 
+// minimum length
 func minLength(data [][]float64) int {
 	min := len(data[0])
 	if len(data) == 1 {
