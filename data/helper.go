@@ -13,8 +13,7 @@ import (
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
-// helper function to get the http request and store into struct
-// input: link, and the target struct type
+// helper function to get the http request and store into struct from polygon.io
 func getPolygon[DataType TickerDetails | Tickers | Hist](url string, target DataType) (result DataType, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Authorization", `Bearer 3X8wQrb0pH9gaNJvY__sq1UohDdHfVt3`)
@@ -37,8 +36,7 @@ func getPolygon[DataType TickerDetails | Tickers | Hist](url string, target Data
 	return result, nil
 }
 
-// helper function to get the http request and store into struct
-// input: link, and the target struct type
+// helper function to get the http request and store into struct from alphavantage
 func getAlphavantage[DataType Overview | AlphaData](url string, target DataType) (result DataType, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	q := req.URL.Query()
@@ -63,6 +61,7 @@ func getAlphavantage[DataType Overview | AlphaData](url string, target DataType)
 	return result, nil
 }
 
+// black-scholes model
 func bs(k, s, sigma, T, dy, r float64, option string) float64 {
 	x := sigma * math.Sqrt(T)
 	d1 := (math.Log(s/k) + 0.5*sigma*sigma*T) / x
@@ -77,12 +76,14 @@ func bs(k, s, sigma, T, dy, r float64, option string) float64 {
 	return premium
 }
 
+// price loss function
 func loss(par []float64, p, k, s, T, dy, r float64, option string) float64 {
 	par[0] = math.Exp(par[0])
 	loss := math.Pow(p-bs(k, s, par[0], T, dy, r, option), 2)
 	return loss
 }
 
+// fitting the blackscholes model
 func fit(p, k, s, T, dy, r float64, option string) float64 {
 	par := []float64{math.Log(0.5)}
 	problem := optimize.Problem{
@@ -125,6 +126,7 @@ func Open[T Model | []string | Stat](filename string, target T) (T, error) {
 	return target, nil
 }
 
+// progress bar initialization
 func progressBar(length int) *progressbar.ProgressBar {
 	bar := progressbar.NewOptions(
 		length,
@@ -166,4 +168,13 @@ func loadMktData(data []Data) ([][]float64, error) {
 		x = append(x, []float64{data[i].K, data[i].T, data[i].Ivol})
 	}
 	return x, nil
+}
+
+// get the index of the sorted stocks
+func stockIndex(stocks []string) map[string]int {
+	result := map[string]int{}
+	for k, v := range stocks {
+		result[v] = k
+	}
+	return result
 }

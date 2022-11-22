@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"main/data"
 	"main/mc"
 	"main/utils"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -24,11 +26,24 @@ const Layout = "2006-01-02"
 var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NVDA", "AVGO", "QCOM", "INTC"}
 
 func main() {
+	sort.Strings(DefaultStocks)
+
+	selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
+
+	filterStocks, stocksMap, err := filter(selectStocks, DefaultStocks)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+
 	allModelsMap, err := data.Calibrate(DefaultStocks)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
 	}
+
+	sampleModels := data.ModelSample(filterStocks, allModelsMap)
+	fmt.Println(sampleModels)
 
 	allmu, allcorrMatrix, allspotref, err := data.Statistics(DefaultStocks)
 	if err != nil {
@@ -36,6 +51,9 @@ func main() {
 		os.Exit(-1)
 	}
 	_, _, _, _ = allmu, allcorrMatrix, allspotref, allModelsMap
+
+	corr := data.CorrSample(filterStocks, stocksMap, allcorrMatrix)
+	fmt.Println(corr)
 
 	// strike := 0.80
 	// cpn := 0.10
@@ -155,4 +173,22 @@ func wop(spotPrice map[string]float64, dates map[string][]time.Time, path mc.MCP
 		wop = append(wop, minP)
 	}
 	return wop
+}
+
+func filter(selectStocks, DefaultStocks []string) ([]string, map[string]int, error) {
+	stockIndex := map[string]int{}
+	var stocks []string
+	for i, v := range DefaultStocks {
+		for j := range selectStocks {
+			if v == selectStocks[j] {
+				stockIndex[v] = i
+				stocks = append(stocks, v)
+			}
+		}
+	}
+	if len(stocks) == 0 {
+		err := errors.New("there is no available stocks")
+		return nil, nil, err
+	}
+	return stocks, stockIndex, nil
 }

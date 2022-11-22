@@ -79,14 +79,14 @@ type Overview struct {
 type Model map[string]mc.HypHyp
 
 type Corr struct {
-	X1   string
-	X2   string
+	X1   int
+	X2   int
 	Corr float64
 }
 
 type Stat struct {
 	SpotPrice map[string]float64 `json:"spot_price"`
 	Mean      map[string]float64 `json:"mean"`
-	Index     map[int]string     `json:"index"`
+	Index     map[string]int     `json:"index"`
 	CorrPairs []Corr             `json:"correlation_pairs"`
 }
