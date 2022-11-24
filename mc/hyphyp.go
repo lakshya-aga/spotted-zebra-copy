@@ -81,6 +81,10 @@ func (m HypHyp) Set(p []float64) Model {
 	return m
 }
 
+func (m HypHyp) Pars() []float64 {
+	return []float64{m.Sigma, m.Alpha, m.Beta, m.Kappa, m.Rho}
+}
+
 // Compute model implied volatility
 func (m HypHyp) IVol(k, T float64) float64 {
 	a := m.Alpha * m.Kappa * T

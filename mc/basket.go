@@ -31,11 +31,6 @@ func (b Basket) Path(obsdates []time.Time, pxRatio []float64, d *distmv.Normal, 
 	nAssets := len(b)
 	n := len(obsdates) - 1
 
-	// Generate correlated std normal variates for stock SDE
-	// d, ok := distmv.NewNormal(mu, corr, rand.NewSource(uint64(time.Now().UnixNano())))
-	// if !ok {
-	// 	return nil, errors.New("invalid corr matrix")
-	// }
 	z := make([][]float64, nAssets)
 	for i := 0; i < nAssets; i++ {
 		z[i] = make([]float64, n)

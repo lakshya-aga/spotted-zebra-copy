@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"fmt"
 	"main/mc"
 	"os"
@@ -12,7 +13,6 @@ import (
 const Layout = "2006-01-02"
 
 /*
-
 get the tickers that have options trading in market
 
 args
@@ -21,14 +21,13 @@ stocks ([]string): slice of tickers
 return
 contractMap (map[string][]string): map of stocks' option contracts
 error (error): error message
-
 */
 func GetTickers(stocks []string) (map[string][]string, error) {
 	// initialize the variables
 	tickersMap := map[string][]string{}
 	var tickerArr []Tickers
 	var stockArr []string
-	ch := make(chan Tickers, len(stocks)) // channel to store contracts
+	ch := make(chan Tickers, len(stocks))     // channel to store contracts
 	stockCh := make(chan string, len(stocks)) // channel to store tickers
 	defer close(ch)
 	defer close(stockCh)
@@ -106,7 +105,6 @@ func GetTickers(stocks []string) (map[string][]string, error) {
 }
 
 /*
-
 get the details of each options
 
 args
@@ -115,7 +113,6 @@ stocks ([]string): slice of tickers
 return
 contractMap (map[string][]Data): map of stocks' option contracts details (strike, maturity, ivol, name)
 error (error): error message
-
 */
 func GetDetails(stocks []string) (map[string][]Data, error) {
 	//initialize variables
@@ -206,7 +203,6 @@ func GetDetails(stocks []string) (map[string][]Data, error) {
 }
 
 /*
-
 get the model parameters
 
 args
@@ -215,22 +211,20 @@ stocks ([]string): slice of tickers
 return
 contractMap (map[string]mc.Model): map of models parameters for each stock
 error (error): error message
-
 */
-func Calibrate(stocks []string) (map[string]mc.Model, error) {
-	modelsMap := make(map[string]mc.Model)
-	// if parameters.json is updated within one day, then just read the file
-	file, err := os.Stat("parameters.json")
+func Calibrate(stocks []string, db *sql.DB) (map[string]mc.Model, error) {
+	var err error
+	today := time.Now().Format(Layout)
+	update, err := updatePar(db, today)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
+	modelsMap := make(map[string]mc.Model)
 
-	modTime, _ := time.Parse(Layout, file.ModTime().Format(Layout))
-	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
-	if modTime.Equal(tNow) {
-		paraMaps, _ := Open("parameters.json", Model{})
-		for k, v := range paraMaps {
-			modelsMap[k] = v
+	if !update {
+		modelsMap, err := getModel(db, today)
+		if err != nil {
+			panic(err)
 		}
 		return modelsMap, nil
 	}
@@ -259,8 +253,16 @@ func Calibrate(stocks []string) (map[string]mc.Model, error) {
 		}(k, v, ch, stocksCh)
 	}
 
+	insertPar := `insert into "ModelParameters"("Date", "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho") values($1, $2, $3, $4, $5, $6, $7)`
 	for i := 0; i < len(data); i++ {
-		modelsMap[<-stocksCh] = <-ch
+		stock := <-stocksCh
+		model := <-ch
+		modelsMap[stock] = model
+		pars := model.Pars()
+		_, err = db.Exec(insertPar, today, stock, pars[0], pars[1], pars[2], pars[3], pars[4])
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// generate output parameters.json data
@@ -278,4 +280,45 @@ func ModelSample(stocks []string, models map[string]mc.Model) map[string]mc.Mode
 		result[stocks[i]] = models[stocks[i]]
 	}
 	return result
+}
+
+func updatePar(db *sql.DB, date string) (bool, error) {
+	rows, err := db.Query(`SELECT "Date" FROM "ModelParameters" WHERE "Date" IN ($1)`, date)
+	defer rows.Close()
+	if err != nil {
+		return false, err
+	}
+	var dates []string
+	for rows.Next() {
+		var dt string
+		err = rows.Scan(&dt)
+		if err != nil {
+			return false, err
+		}
+		dates = append(dates, dt)
+	}
+	if len(dates) == 0 {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
+func getModel(db *sql.DB, today string) (map[string]mc.Model, error) {
+	rows, err := db.Query(`SELECT "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho" FROM "ModelParameters" WHERE "Date" IN ($1)`, today)
+	defer rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	modelsMap := map[string]mc.Model{}
+	for rows.Next() {
+		var ticker string
+		var sigma, alpha, beta, kappa, rho float64
+		err = rows.Scan(&ticker, &sigma, &alpha, &beta, &kappa, &rho)
+		if err != nil {
+			return nil, err
+		}
+		modelsMap[ticker] = mc.HypHyp{Sigma: sigma, Alpha: alpha, Beta: beta, Kappa: kappa, Rho: rho}
+	}
+	return modelsMap, nil
 }

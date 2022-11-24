@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"main/data"
+	"main/db"
 	"main/mc"
 	"main/utils"
 	"os"
@@ -28,6 +29,13 @@ var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NV
 func main() {
 	sort.Strings(DefaultStocks)
 
+	// connect to database
+	db, err := db.ConnectDB()
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
 	selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
 
 	filterStocks, stocksMap, err := filter(selectStocks, DefaultStocks)
@@ -36,7 +44,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	allModelsMap, err := data.Calibrate(DefaultStocks)
+	allModelsMap, err := data.Calibrate(DefaultStocks, db)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
@@ -45,7 +53,7 @@ func main() {
 	sampleModels := data.ModelSample(filterStocks, allModelsMap)
 	fmt.Println(sampleModels)
 
-	allmu, allcorrMatrix, allspotref, err := data.Statistics(DefaultStocks)
+	allmu, allcorrMatrix, allspotref, err := data.Statistics(DefaultStocks, db)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)

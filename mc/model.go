@@ -10,14 +10,16 @@ import (
 
 // Model interface to be satisfied by option pricing model types.
 type Model interface {
-	//Compute a price path under model
+	// Compute a price path under model
 	Path(float64, []float64, []float64, distuv.Normal) []float64
-	//Compute implied vol under the model
+	// Compute implied vol under the model
 	IVol(float64, float64) float64
-	//Get transformed model parameters. Return parameters mapped to the domain (-Inf, Inf)
+	// Get transformed model parameters. Return parameters mapped to the domain (-Inf, Inf)
 	Get() []float64
-	//Create a model for the given transformed parameters
+	// Create a model for the given transformed parameters
 	Set([]float64) Model
+	// Get the parameters
+	Pars() []float64
 }
 
 // Calibrate the given model to input data d. d is an Nx3 slice, with moneyness values in the first column, maturity in years in the second column and market implied volatility in the third column.

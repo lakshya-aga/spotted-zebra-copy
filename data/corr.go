@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"math"
@@ -15,7 +16,6 @@ import (
 )
 
 /*
-
 get the correlation matrix
 
 args
@@ -26,41 +26,42 @@ mean (map[string]float64): map of mean for each stock
 corrMatrix (*mat.SymDense): correlation matrix for each stock
 spotPrice (map[string]float64): spot price for each stock
 error (error): error message
-
 */
-func Statistics(stocks []string) (map[string]float64, *mat.SymDense, map[string]float64, error) {
-	// if statistics.json is updated within one day, then just read the file
-	file, err := os.Stat("statistics.json")
+func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense, map[string]float64, error) {
+	var err error
+	today := time.Now().Format(Layout)
+	update, err := updateCorr(db, today)
 	if err != nil {
-		return nil, nil, nil, err
+		panic(err)
 	}
 
-	modTime, _ := time.Parse(Layout, file.ModTime().Format(Layout))
-	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
-	if modTime.Equal(tNow) {
+	if !update {
 		var corr []float64
-		stat, _ := Open("statistics.json", Stat{})
 		for i := 0; i < len(stocks); i++ {
 			for j := 0; j < len(stocks); j++ {
 				if i == j {
 					corr = append(corr, 1.0)
 				} else if i > j {
-					for k := range stat.CorrPairs {
-						if stat.CorrPairs[k].X1 == stat.Index[stocks[j]] && stat.CorrPairs[k].X2 == stat.Index[stocks[i]] {
-							corr = append(corr, stat.CorrPairs[k].Corr)
-						}
+					val, err := getCorr(db, today, stocks[j], stocks[i])
+					if err != nil {
+						panic(err)
 					}
+					corr = append(corr, val)
 				} else {
-					for k := range stat.CorrPairs {
-						if stat.CorrPairs[k].X1 == stat.Index[stocks[i]] && stat.CorrPairs[k].X2 == stat.Index[stocks[j]] {
-							corr = append(corr, stat.CorrPairs[k].Corr)
-						}
+					val, err := getCorr(db, today, stocks[i], stocks[j])
+					if err != nil {
+						panic(err)
 					}
+					corr = append(corr, val)
 				}
 			}
 		}
-		corrMatrix := mat.NewSymDense(len(stat.Index), corr)
-		return stat.Mean, corrMatrix, stat.SpotPrice, nil
+		corrMatrix := mat.NewSymDense(len(stocks), corr)
+		mu, fixings, err := getStats(db, today)
+		if err != nil {
+			panic(err)
+		}
+		return mu, corrMatrix, fixings, nil
 	}
 
 	// initialize variables
@@ -87,12 +88,12 @@ func Statistics(stocks []string) (map[string]float64, *mat.SymDense, map[string]
 		stockpx[<-stockch] = <-ch
 	}
 	// get the date 3 months before
-	refDate := time.Now().AddDate(0, -3, -1).Format("2006-01-02")
+	refDate := time.Now().AddDate(0, -3, -1).Format(Layout)
 	// initialize variables
 	rx := map[string][]float64{}
 	var rxArr [][]float64
 	mu := map[string]float64{}
-	spotRef := map[string]float64{}
+	fixings := map[string]float64{}
 	// calculate the returns and means, and save the spot price
 	for k, v := range stockpx {
 		var px []float64
@@ -112,7 +113,7 @@ func Statistics(stocks []string) (map[string]float64, *mat.SymDense, map[string]
 		}
 		rx[k] = rt
 		mu[k] = stat.Mean(rt, nil)
-		spotRef[k], _ = strconv.ParseFloat(v[dateArr[0].String()].Close, 64)
+		fixings[k], _ = strconv.ParseFloat(v[dateArr[0].String()].Close, 64)
 		rxArr = append(rxArr, rt)
 	}
 	// make the slice equal length
@@ -131,26 +132,46 @@ func Statistics(stocks []string) (map[string]float64, *mat.SymDense, map[string]
 	// get the index for the stocks position
 	stocksMap := stockIndex(stocks)
 
+	insertCorr := `insert into "CorrPairs"("Date", "X0", "X1", "Corr") values($1, $2, $3, $4)`
+	insertStat := `insert into "Statistics"("Date", "Ticker", "Index", "Mean", "Fixing") values($1, $2, $3, $4, $5)`
 	// save the correlation pairs
 	for i := range stocks {
 		for j := range stocks {
 			if i < j {
 				corrPairs = append(corrPairs, Corr{X1: i, X2: j, Corr: corrMatrix.At(i, j)})
+				// add data to database
+				_, err = db.Exec(insertCorr, time.Now().Format(Layout), stocks[i], stocks[j], corrMatrix.At(i, j))
+				if err != nil {
+					panic(err)
+				}
 			}
+		}
+		// add data to database
+		_, err = db.Exec(insertStat, time.Now().Format(Layout), stocks[i], stocksMap[stocks[i]], mu[stocks[i]], fixings[stocks[i]])
+		if err != nil {
+			panic(err)
 		}
 	}
 
 	// output data
-	statOutput := Stat{SpotPrice: spotRef, Mean: mu, Index: stocksMap, CorrPairs: corrPairs}
+	statOutput := Stat{SpotPrice: fixings, Mean: mu, Index: stocksMap, CorrPairs: corrPairs}
 	err = createJson(statOutput, "statistics.json")
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return mu, corrMatrix, spotRef, nil
+	return mu, corrMatrix, fixings, nil
 }
 
-// get the spot price
-func SpotPx(stocks []string) map[string]float64 {
+/*
+get the latest price (for future price evaluation use)
+
+args
+stocks ([]string): slice of tickers
+
+return
+mean (map[string]float64): map of latest price for each stock
+*/
+func LatestPx(stocks []string) map[string]float64 {
 	ch := make(chan map[string]Hist, len(stocks))
 	stockch := make(chan string, len(stocks))
 	defer close(ch)
@@ -199,21 +220,59 @@ func CorrSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense) *
 	return sampleCorr
 }
 
+func getStats(db *sql.DB, today string) (map[string]float64, map[string]float64, error) {
+	rows, err := db.Query(`SELECT "Ticker", "Mean", "Fixing" FROM "Statistics" WHERE "Date" IN ($1)`, today)
+	defer rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	means := map[string]float64{}
+	fixings := map[string]float64{}
+	for rows.Next() {
+		var ticker string
+		var mean, fixing float64
+		err = rows.Scan(&ticker, &mean, &fixing)
+		if err != nil {
+			return nil, nil, err
+		}
+		means[ticker] = mean
+		fixings[ticker] = fixing
+	}
+	return means, fixings, nil
+}
 
-// get the correlation from the matrix
-// func Corr(stocks []string, matrix *mat.SymDense, s1, s2 string) (float64, error) {
-// 	var err error
-// 	s1, s2 = strings.ToUpper(s1), strings.ToUpper(s2)
-// 	stocksMap := stockIndex(stocks)
-// 	idx1, ok1 := stocksMap[s1]
-// 	if !ok1 {
-// 		err = fmt.Errorf("cannot find %v in the ticker list", s1)
-// 		return math.NaN(), err
-// 	}
-// 	idx2, ok2 := stocksMap[s2]
-// 	if !ok2 {
-// 		err = fmt.Errorf("cannot find %v in the ticker list", s2)
-// 		return math.NaN(), err
-// 	}
-// 	return matrix.At(idx1, idx2), nil
-// }
+func getCorr(db *sql.DB, date, x0, x1 string) (float64, error) {
+	var corr float64
+	row := db.QueryRow(`SELECT "Corr" FROM "CorrPairs" WHERE "Date"=$1 AND "X0"=$2 AND "X1"=$3`, date, x0, x1)
+	switch err := row.Scan(&corr); err {
+	case sql.ErrNoRows:
+		return math.NaN(), errors.New("no rows were returned")
+	case nil:
+		return corr, nil
+	default:
+		return math.NaN(), err
+	}
+}
+
+func updateCorr(db *sql.DB, date string) (bool, error) {
+	rows, err := db.Query(`SELECT "Date" FROM "CorrPairs" WHERE "Date" IN ($1)`, date)
+	defer rows.Close()
+	if err != nil {
+		return false, err
+	}
+	var dates []string
+	for rows.Next() {
+		var dt string
+		err = rows.Scan(&dt)
+		if err != nil {
+			return false, err
+		}
+		dates = append(dates, dt)
+	}
+	if len(dates) == 0 {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
