@@ -157,10 +157,17 @@ func GetDetails(stocks []string) (map[string][]Data, error) {
 				strike := result.Results.Details.StrikePrice
 				underlying := result.Results.UnderlyingAsset.Price
 				callPut := result.Results.Details.ContractType
-				close := result.Results.Day.Close
+				p := result.Results.Day.Close
 				k := strike / underlying
+				t, err := time.Parse("2006-01-02", expiry)
+				if err != nil {
+					fmt.Printf("at stock %v", stock)
+					fmt.Println(err)
+					os.Exit(-1)
+				}
+				maturity := float64(t.Unix()-time.Now().Unix()) / float64(60*60*24*365)
 				// return empty data if not match requirement
-				if (strike >= underlying && callPut == "put") || (strike <= underlying && callPut == "call") || close == 0. || k < 0.5 || k > 2.0 {
+				if (strike >= underlying && callPut == "put") || (strike <= underlying && callPut == "call") || p == 0. || k < 0.5 || k > 2.0 || maturity < 0. {
 					ch <- Data{}
 					return
 				}
@@ -169,14 +176,6 @@ func GetDetails(stocks []string) (map[string][]Data, error) {
 				} else {
 					option = "p"
 				}
-				p := close
-				t, err := time.Parse("2006-01-02", expiry)
-				if err != nil {
-					fmt.Printf("at stock %v", stock)
-					fmt.Println(err)
-					os.Exit(-1)
-				}
-				maturity := float64(t.Unix()-time.Now().Unix()) / float64(60*60*24*365)
 				r := 0.03
 				// calculate implied volatility based on black-scholes model
 				ivol := fit(p, strike, underlying, maturity, dy, r, option)
@@ -284,10 +283,10 @@ func ModelSample(stocks []string, models map[string]mc.Model) map[string]mc.Mode
 
 func updatePar(db *sql.DB, date string) (bool, error) {
 	rows, err := db.Query(`SELECT "Date" FROM "ModelParameters" WHERE "Date" IN ($1)`, date)
-	defer rows.Close()
 	if err != nil {
 		return false, err
 	}
+	defer rows.Close()
 	var dates []string
 	for rows.Next() {
 		var dt string
@@ -306,10 +305,10 @@ func updatePar(db *sql.DB, date string) (bool, error) {
 
 func getModel(db *sql.DB, today string) (map[string]mc.Model, error) {
 	rows, err := db.Query(`SELECT "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho" FROM "ModelParameters" WHERE "Date" IN ($1)`, today)
-	defer rows.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	modelsMap := map[string]mc.Model{}
 	for rows.Next() {
 		var ticker string

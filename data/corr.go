@@ -222,10 +222,10 @@ func CorrSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense) *
 
 func getStats(db *sql.DB, today string) (map[string]float64, map[string]float64, error) {
 	rows, err := db.Query(`SELECT "Ticker", "Mean", "Fixing" FROM "Statistics" WHERE "Date" IN ($1)`, today)
-	defer rows.Close()
 	if err != nil {
 		return nil, nil, err
 	}
+	defer rows.Close()
 	means := map[string]float64{}
 	fixings := map[string]float64{}
 	for rows.Next() {
@@ -256,10 +256,10 @@ func getCorr(db *sql.DB, date, x0, x1 string) (float64, error) {
 
 func updateCorr(db *sql.DB, date string) (bool, error) {
 	rows, err := db.Query(`SELECT "Date" FROM "CorrPairs" WHERE "Date" IN ($1)`, date)
-	defer rows.Close()
 	if err != nil {
 		return false, err
 	}
+	defer rows.Close()
 	var dates []string
 	for rows.Next() {
 		var dt string
