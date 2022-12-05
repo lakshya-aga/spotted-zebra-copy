@@ -4,13 +4,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 func GetPastContractsDetails(db *sql.DB) {
 	var option string
+	var data []IvolData
 	symbol := "AAPL"
 	px, err := GetHistPx(symbol)
 	if err != nil {
@@ -65,15 +69,49 @@ func GetPastContractsDetails(db *sql.DB) {
 			r := 0.03
 			// calculate implied volatility based on black-scholes model
 			ivol := fit(contractPx.Results[i].C, tickers[k].StrikePrice, underlying, maturity, 0.0, r, option)
+			data = append(data, IvolData{Date: t0.Format(Layout), Name: tickers[k].Ticker, K: s, T: maturity, Ivol: ivol})
 			// fmt.Println(tickers[k].Ticker, contractPx.Close, k, maturity, ivol)
 			// dataMap[t0.Format(Layout)] = append(dataMap[t0.Format(Layout)], Data{K: k, T: maturity, Ivol: ivol, Name: tickers[k].Ticker})
-			insertHist := `insert into "HistoricalData"("Date", "Ticker", "K", "T", "Ivol") values($1, $2, $3, $4, $5)`
-			_, err = db.Exec(insertHist, t0.Format(Layout), tickers[k].Ticker, s, maturity, ivol)
-			if err != nil {
-				panic(err)
-			}
+			// insertHist := `insert into "HistoricalData"("Date", "Ticker", "K", "T", "Ivol") values($1, $2, $3, $4, $5)`
+			// _, err = db.Exec(insertHist, t0.Format(Layout), tickers[k].Ticker, s, maturity, ivol)
+			// if err != nil {
+			// 	panic(err)
+			// }
 			bar.Add(1)
 		}
+	}
+
+	txn, err := db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	stmt, err := txn.Prepare(pq.CopyIn("HistoricalData", "Date", "Ticker", "K", "T", "Ivol"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for i, d := range data {
+		fmt.Println(i)
+		_, err = stmt.Exec(d.Date, d.Name, d.K, d.T, d.Ivol)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	_, err = stmt.Exec()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = stmt.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = txn.Commit()
+	if err != nil {
+		log.Fatal(err)
 	}
 	fmt.Println("done!")
 	// dataMap := map[string][]Data{}

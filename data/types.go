@@ -108,3 +108,11 @@ type TickerAggs struct {
 	Results []TickerAggsResult `json:"results"`
 	Status  string             `json:"status"`
 }
+
+type IvolData struct {
+	Date string `json:"Date"`
+	K    float64 `json:"K"`
+	T    float64 `json:"T"`
+	Ivol float64 `json:"Ivol"`
+	Name string  `json:"Name"`
+}
