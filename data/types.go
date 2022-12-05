@@ -7,7 +7,10 @@ type TickersArr struct {
 }
 
 type TickersPara struct {
-	Ticker string `json:"ticker"`
+	Ticker         string  `json:"ticker"`
+	StrikePrice    float64 `json:"strike_price"`
+	ExpirationDate string  `json:"expiration_date"`
+	ContractType   string  `json:"contract_type"`
 }
 
 type Tickers struct {
@@ -57,6 +60,11 @@ type TickerDetails struct {
 	Results TickerResult `json:"results"`
 }
 
+type TickerLastTrade struct {
+	Status string  `json:"status"`
+	Close  float64 `json:"close"`
+}
+
 type Data struct {
 	K    float64 `json:"K"`
 	T    float64 `json:"T"`
@@ -89,4 +97,14 @@ type Stat struct {
 	Mean      map[string]float64 `json:"mean"`
 	Index     map[string]int     `json:"index"`
 	CorrPairs []Corr             `json:"correlation_pairs"`
+}
+
+type TickerAggsResult struct {
+	C float64 `json:"c"`
+	T int64 `json:"t"`
+}
+
+type TickerAggs struct {
+	Results []TickerAggsResult `json:"results"`
+	Status  string             `json:"status"`
 }

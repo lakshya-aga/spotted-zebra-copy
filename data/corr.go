@@ -203,9 +203,13 @@ func LatestPx(stocks []string) map[string]float64 {
 }
 
 // sample the correlation matrix
-func CorrSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense) *mat.SymDense {
+func StatsSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense, allmu map[string]float64, allspotref map[string]float64) ([]float64, *mat.SymDense, map[string]float64) {
 	var corr []float64
+	var sampleMu []float64
+	sampleRef := map[string]float64{}
 	for i := range stocks {
+		sampleMu = append(sampleMu, allmu[stocks[i]])
+		sampleRef[stocks[i]] = allspotref[stocks[i]]
 		for j := range stocks {
 			if i == j {
 				corr = append(corr, 1.0)
@@ -217,7 +221,7 @@ func CorrSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense) *
 		}
 	}
 	sampleCorr := mat.NewSymDense(len(stocks), corr)
-	return sampleCorr
+	return sampleMu, sampleCorr, sampleRef
 }
 
 func getStats(db *sql.DB, today string) (map[string]float64, map[string]float64, error) {
@@ -275,4 +279,3 @@ func updateCorr(db *sql.DB, date string) (bool, error) {
 		return false, nil
 	}
 }
-

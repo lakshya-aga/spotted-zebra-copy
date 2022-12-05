@@ -1,15 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
 	"main/data"
 	"main/db"
 	"main/mc"
 	"main/utils"
-	"os"
-	"sort"
 	"time"
 )
 
@@ -27,7 +22,15 @@ const Layout = "2006-01-02"
 var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NVDA", "AVGO", "QCOM", "INTC"}
 
 func main() {
-	sort.Strings(DefaultStocks)
+
+	// a, err := data.GetPastContracts("AAPL")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(-1)
+	// }
+	// fmt.Println(a)
+
+	// sort.Strings(DefaultStocks)
 
 	// connect to database
 	db, err := db.ConnectDB()
@@ -36,32 +39,34 @@ func main() {
 	}
 	defer db.Close()
 
-	selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
+	data.GetPastContractsDetails(db)
 
-	filterStocks, stocksMap, err := filter(selectStocks, DefaultStocks)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
-	}
+	// selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
 
-	allModelsMap, err := data.Calibrate(DefaultStocks, db)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
-	}
+	// filterStocks, stocksMap, err := utils.Filter(selectStocks, DefaultStocks)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(-1)
+	// }
 
-	sampleModels := data.ModelSample(filterStocks, allModelsMap)
-	fmt.Println(sampleModels)
+	// allModelsMap, err := data.Calibrate(DefaultStocks, db)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(-1)
+	// }
 
-	allmu, allcorrMatrix, allspotref, err := data.Statistics(DefaultStocks, db)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
-	}
-	_, _, _, _ = allmu, allcorrMatrix, allspotref, allModelsMap
+	// sampleModels := data.ModelSample(filterStocks, allModelsMap)
+	// fmt.Println(sampleModels)
 
-	corr := data.CorrSample(filterStocks, stocksMap, allcorrMatrix)
-	fmt.Println(corr)
+	// allmu, allcorrMatrix, allref, err := data.Statistics(DefaultStocks, db)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(-1)
+	// }
+	// _, _, _, _ = allmu, allcorrMatrix, allref, allModelsMap
+
+	// sampleMu, sampleCorr, sampleRef := data.StatsSample(filterStocks, stocksMap, allcorrMatrix, allmu, allref)
+	// fmt.Println(sampleCorr)
 
 	// strike := 0.80
 	// cpn := 0.10
@@ -72,10 +77,9 @@ func main() {
 	// KC := 0.80
 	// maturity := 3
 	// freq := 1
-	// isEuro := false
-	// stocks := []string{"AAPL", "AMZN", "META", "MSFT", "TSLA"}
+	// isEuro := true
 
-	// stocks = utils.Format(stocks)
+	// stocks := utils.Format(filterStocks)
 
 	// tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
 	// dates, err := utils.GenerateDates(tNow, maturity, freq)
@@ -84,21 +88,13 @@ func main() {
 	// 	os.Exit(-1)
 	// }
 
-	// stk, modelsMap := data.ModelSample(stocks, allModelsMap)
-
-	// bsk, err := mc.NewBasket(modelsMap)
+	// bsk, err := mc.NewBasket(sampleModels)
 	// if err != nil {
 	// 	fmt.Println(err)
 	// 	os.Exit(-1)
 	// }
 
-	// mu, corrMatrix, spotref, err := data.Statistics(stk)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(-1)
-	// }
-
-	// dz1, ok := distmv.NewNormal(mu, corrMatrix, rand.NewSource(uint64(time.Now().UnixNano())))
+	// dz1, ok := distmv.NewNormal(sampleMu, sampleCorr, rand.NewSource(uint64(time.Now().UnixNano())))
 	// if !ok {
 	// 	fmt.Println("invalid corr matrix")
 	// 	os.Exit(-1)
@@ -106,16 +102,16 @@ func main() {
 
 	// dz2 := distuv.Normal{Mu: 0.0, Sigma: 1.0, Src: rand.NewSource(uint64(time.Now().UnixNano()))}
 
-	// fcn, err := payoff.NewFCN(stk, strike, cpn, barrierCpn, fixCpn, KO, KI, KC, maturity, freq, isEuro, dates)
+	// fcn, err := payoff.NewFCN(stocks, strike, cpn, barrierCpn, fixCpn, KO, KI, KC, maturity, freq, isEuro, dates)
 	// if err != nil {
 	// 	fmt.Println(err)
 	// 	os.Exit(-1)
 	// }
 
 	// var pxRatio []float64
-	// currentPx := data.SpotPx(stk)
-	// for _, v := range stk {
-	// 	pxRatio = append(pxRatio, currentPx[v]/spotref[v])
+	// currentPx := data.LatestPx(stocks)
+	// for _, v := range stocks {
+	// 	pxRatio = append(pxRatio, currentPx[v]/sampleRef[v])
 	// }
 
 	// nsamples := 10000
@@ -132,17 +128,15 @@ func main() {
 	// 			os.Exit(-1)
 	// 		}
 
-	// 		wop := wop(spotref, dates, path)
+	// 		wop := wop(sampleRef, dates, path)
 
 	// 		x := fcn.Payout(wop)
 	// 		ch <- x
 	// 	}()
 	// }
 
-	// // bar := progressBar(10)
 	// for l := 0; l < nsamples; l++ {
 	// 	out += <-ch
-	// 	// bar.Add(1)
 	// }
 
 	// price := out / float64(nsamples)
@@ -150,20 +144,6 @@ func main() {
 
 	// fcn.Save("contract.json", price, spotref)
 
-}
-
-// helper function to open tickers.json
-func bsk(filename string) (bskData, error) {
-	details := bskData{}
-	file, err := os.ReadFile(filename)
-	if err != nil {
-		return bskData{}, err
-	}
-	err = json.Unmarshal([]byte(file), &details)
-	if err != nil {
-		return bskData{}, err
-	}
-	return details, nil
 }
 
 func wop(spotPrice map[string]float64, dates map[string][]time.Time, path mc.MCPath) []float64 {
@@ -181,22 +161,4 @@ func wop(spotPrice map[string]float64, dates map[string][]time.Time, path mc.MCP
 		wop = append(wop, minP)
 	}
 	return wop
-}
-
-func filter(selectStocks, DefaultStocks []string) ([]string, map[string]int, error) {
-	stockIndex := map[string]int{}
-	var stocks []string
-	for i, v := range DefaultStocks {
-		for j := range selectStocks {
-			if v == selectStocks[j] {
-				stockIndex[v] = i
-				stocks = append(stocks, v)
-			}
-		}
-	}
-	if len(stocks) == 0 {
-		err := errors.New("there is no available stocks")
-		return nil, nil, err
-	}
-	return stocks, stockIndex, nil
 }

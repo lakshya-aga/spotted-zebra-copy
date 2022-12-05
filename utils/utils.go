@@ -178,3 +178,21 @@ func Format(stocks []string) []string {
 	}
 	return unique
 }
+
+func Filter(selectStocks, DefaultStocks []string) ([]string, map[string]int, error) {
+	stockIndex := map[string]int{}
+	var stocks []string
+	for i, v := range DefaultStocks {
+		for j := range selectStocks {
+			if v == selectStocks[j] {
+				stockIndex[v] = i
+				stocks = append(stocks, v)
+			}
+		}
+	}
+	if len(stocks) == 0 {
+		err := errors.New("there is no available stocks")
+		return nil, nil, err
+	}
+	return stocks, stockIndex, nil
+}

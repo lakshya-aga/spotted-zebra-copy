@@ -14,7 +14,7 @@ import (
 )
 
 // helper function to get the http request and store into struct from polygon.io
-func getPolygon[DataType TickerDetails | Tickers | Hist](url string, target DataType) (result DataType, err error) {
+func getPolygon[DataType TickerDetails | Tickers | TickerAggs](url string, target DataType) (result DataType, err error) {
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Authorization", `Bearer 3X8wQrb0pH9gaNJvY__sq1UohDdHfVt3`)
 	if err != nil {
@@ -23,7 +23,6 @@ func getPolygon[DataType TickerDetails | Tickers | Hist](url string, target Data
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println(err)
 		return target, err
 	}
 	defer resp.Body.Close()

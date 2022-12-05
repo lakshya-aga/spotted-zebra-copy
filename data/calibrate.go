@@ -167,7 +167,7 @@ func GetDetails(stocks []string) (map[string][]Data, error) {
 				}
 				maturity := float64(t.Unix()-time.Now().Unix()) / float64(60*60*24*365)
 				// return empty data if not match requirement
-				if (strike >= underlying && callPut == "put") || (strike <= underlying && callPut == "call") || p == 0. || k < 0.5 || k > 2.0 || maturity < 0. {
+				if (strike >= underlying && callPut == "put") || (strike <= underlying && callPut == "call") || p == 0. || k < 0.5 || k > 2.0 || maturity <= 0. {
 					ch <- Data{}
 					return
 				}
