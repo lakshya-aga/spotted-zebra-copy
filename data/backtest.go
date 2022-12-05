@@ -4,12 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
-
-	"github.com/lib/pq"
 )
 
 func GetPastContractsDetails(db *sql.DB) {
@@ -37,6 +34,7 @@ func GetPastContractsDetails(db *sql.DB) {
 	bar := progressBar(len(tickers))
 	for k := range tickers {
 		bar.Describe(fmt.Sprintf("Processing %v\t", tickers[k].Ticker))
+		bar.Add(1)
 		url := fmt.Sprintf("https://api.polygon.io/v2/aggs/ticker/%v/range/1/day/%v/%v?sort=asc&limit=5000", tickers[k].Ticker, tStart.Format(Layout), tEnd.Format(Layout))
 		contractPx, err := getPolygon(url, TickerAggs{})
 		if err != nil {
@@ -44,11 +42,9 @@ func GetPastContractsDetails(db *sql.DB) {
 			os.Exit(-1)
 		}
 		if contractPx.Status != "OK" {
-			bar.Add(1)
 			continue
 		}
 		if len(contractPx.Results) == 0 {
-			bar.Add(1)
 			continue
 		}
 		for i := 0; i < len(contractPx.Results); i++ {
@@ -58,7 +54,6 @@ func GetPastContractsDetails(db *sql.DB) {
 			underlying, _ := strconv.ParseFloat(px[t0.Format(Layout)].Close, 64)
 			s := tickers[k].StrikePrice / underlying
 			if (tickers[k].StrikePrice >= underlying && tickers[k].ContractType == "put") || (tickers[k].StrikePrice <= underlying && tickers[k].ContractType == "call") || maturity <= 0.0 || s < 0.5 || s > 2.0 {
-				bar.Add(1)
 				continue
 			}
 			if tickers[k].ContractType == "call" {
@@ -77,41 +72,25 @@ func GetPastContractsDetails(db *sql.DB) {
 			// if err != nil {
 			// 	panic(err)
 			// }
-			bar.Add(1)
 		}
 	}
 
-	txn, err := db.Begin()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	stmt, err := txn.Prepare(pq.CopyIn("HistoricalData", "Date", "Ticker", "K", "T", "Ivol"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for i, d := range data {
-		fmt.Println(i)
-		_, err = stmt.Exec(d.Date, d.Name, d.K, d.T, d.Ivol)
-		if err != nil {
-			log.Fatal(err)
+	fmt.Println("here")
+	sqlStr := `insert into HistoricalData ("Date", "Ticker", "K", "T", "Ivol") values `
+	vals := []interface{}{}
+	for i, row := range data {
+		n := i * 5
+		sqlStr += `(`
+		for j := 0; j < 5; j++ {
+			sqlStr += `$` + strconv.Itoa(n+j+1) + `,`
 		}
+		sqlStr = sqlStr[:len(sqlStr)-1] + `),`
+		vals = append(vals, row.Date, row.Name, row.K, row.T, row.Ivol)
 	}
-
-	_, err = stmt.Exec()
+	sqlStr = sqlStr[:len(sqlStr)-1]
+	_, err = db.Exec(sqlStr, vals...)
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = stmt.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = txn.Commit()
-	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	fmt.Println("done!")
 	// dataMap := map[string][]Data{}
