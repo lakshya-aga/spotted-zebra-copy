@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"main/data"
 	"main/db"
 	"main/mc"
@@ -22,14 +23,6 @@ const Layout = "2006-01-02"
 var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NVDA", "AVGO", "QCOM", "INTC"}
 
 func main() {
-
-	// a, err := data.GetPastContracts("AAPL")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(-1)
-	// }
-	// fmt.Println(a)
-
 	// sort.Strings(DefaultStocks)
 
 	// connect to database
@@ -39,7 +32,11 @@ func main() {
 	}
 	defer db.Close()
 
-	data.GetPastContractsDetails(db)
+	for i := 0; i < len(DefaultStocks); i++ {
+		fmt.Printf("Handing %s\n", DefaultStocks[i])
+		data.GetPastContractsDetails(DefaultStocks[i], db)
+		data.FitPastParameters(DefaultStocks[i], db)
+	}
 
 	// selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
 

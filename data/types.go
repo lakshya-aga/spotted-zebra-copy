@@ -101,18 +101,20 @@ type Stat struct {
 
 type TickerAggsResult struct {
 	C float64 `json:"c"`
-	T int64 `json:"t"`
+	T int64   `json:"t"`
 }
 
 type TickerAggs struct {
 	Results []TickerAggsResult `json:"results"`
 	Status  string             `json:"status"`
+	Count   int                `json:"resultsCount"`
 }
 
 type IvolData struct {
-	Date string `json:"Date"`
-	K    float64 `json:"K"`
-	T    float64 `json:"T"`
-	Ivol float64 `json:"Ivol"`
-	Name string  `json:"Name"`
+	Date       string  `json:"Date"`
+	K          float64 `json:"K"`
+	T          float64 `json:"T"`
+	Ivol       float64 `json:"Ivol"`
+	Name       string  `json:"Name"`
+	Underlying string  `json:"Underlying"`
 }

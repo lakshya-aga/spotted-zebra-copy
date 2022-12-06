@@ -1,25 +1,87 @@
 package data
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
+	"main/mc"
 	"os"
 	"strconv"
 	"time"
 )
 
-func GetPastContractsDetails(db *sql.DB) {
+func FitPastParameters(symbol string, db *sql.DB) {
+	rows, err := db.Query(`SELECT DISTINCT "Date", "Ticker", "K", "T", "Ivol" FROM "HistoricalData" WHERE "Underlying" = $1 ORDER BY "Date"`, symbol)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+	defer rows.Close()
+	data := map[string][]Data{}
+	for rows.Next() {
+		var date, name string
+		var k, t, ivol float64
+		err = rows.Scan(&date, &name, &k, &t, &ivol)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(-1)
+		}
+		data[date] = append(data[date], Data{Name: name, K: k, T: t, Ivol: ivol})
+	}
+
+	ch := make(chan mc.Model, len(data))
+	datesCh := make(chan string, len(data))
+	defer close(ch)
+	defer close(datesCh)
+
+	for dt, d := range data {
+		go func(date string, data []Data, ch chan mc.Model, datesCh chan string) {
+			var model mc.Model = mc.NewHypHyp()
+			d, err := loadMktData(data)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(-1)
+			}
+			model = mc.Fit(model, d)
+			ch <- model
+			datesCh <- date
+		}(dt, d, ch, datesCh)
+	}
+
+	sqlStr := `insert into "BacktestParameters" ("Date", "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho") values %s`
+	valchunk := map[int][]interface{}{}
+	datachunk := map[int][][]interface{}{}
+	c := 0
+	for i := 0; i < len(data); i++ {
+		dt := <-datesCh
+		model := <-ch
+		pars := model.Pars()
+		valchunk[c] = append(valchunk[c], dt, symbol, pars[0], pars[1], pars[2], pars[3], pars[4])
+		datachunk[c] = append(datachunk[c], []interface{}{dt, symbol, pars[0], pars[1], pars[2], pars[3], pars[4]})
+		n := (i + 1) % 3000
+		if n == 0 {
+			c++
+		}
+	}
+	for k, v := range datachunk {
+		subStr := prepareQueryCreateBulk(sqlStr, v, 7)
+		_, err = db.Exec(subStr, valchunk[k]...)
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("saved all parameters!")
+}
+
+func GetPastContractsDetails(symbol string, db *sql.DB) {
 	var option string
 	var data []IvolData
-	symbol := "AAPL"
 	px, err := GetHistPx(symbol)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
 	}
-
-	// dates := getDates(px)
 
 	tickers, err := GetPastContracts(symbol)
 	if err != nil {
@@ -41,10 +103,7 @@ func GetPastContractsDetails(db *sql.DB) {
 			fmt.Println(err)
 			os.Exit(-1)
 		}
-		if contractPx.Status != "OK" {
-			continue
-		}
-		if len(contractPx.Results) == 0 {
+		if contractPx.Count == 0 || len(contractPx.Results) == 0 {
 			continue
 		}
 		for i := 0; i < len(contractPx.Results); i++ {
@@ -64,78 +123,31 @@ func GetPastContractsDetails(db *sql.DB) {
 			r := 0.03
 			// calculate implied volatility based on black-scholes model
 			ivol := fit(contractPx.Results[i].C, tickers[k].StrikePrice, underlying, maturity, 0.0, r, option)
-			data = append(data, IvolData{Date: t0.Format(Layout), Name: tickers[k].Ticker, K: s, T: maturity, Ivol: ivol})
-			// fmt.Println(tickers[k].Ticker, contractPx.Close, k, maturity, ivol)
-			// dataMap[t0.Format(Layout)] = append(dataMap[t0.Format(Layout)], Data{K: k, T: maturity, Ivol: ivol, Name: tickers[k].Ticker})
-			// insertHist := `insert into "HistoricalData"("Date", "Ticker", "K", "T", "Ivol") values($1, $2, $3, $4, $5)`
-			// _, err = db.Exec(insertHist, t0.Format(Layout), tickers[k].Ticker, s, maturity, ivol)
-			// if err != nil {
-			// 	panic(err)
-			// }
+			data = append(data, IvolData{Date: t0.Format(Layout), Name: tickers[k].Ticker, K: s, T: maturity, Ivol: ivol, Underlying: symbol})
 		}
 	}
-
-	fmt.Println("here")
-	sqlStr := `insert into HistoricalData ("Date", "Ticker", "K", "T", "Ivol") values `
-	vals := []interface{}{}
-	for i, row := range data {
-		n := i * 5
-		sqlStr += `(`
-		for j := 0; j < 5; j++ {
-			sqlStr += `$` + strconv.Itoa(n+j+1) + `,`
+	if len(data) != 0 {
+		sqlStr := `insert into "HistoricalData" ("Date", "Ticker", "K", "T", "Ivol", "Underlying") values %s`
+		valchunk := map[int][]interface{}{}
+		datachunk := map[int][][]interface{}{}
+		c := 0
+		for i, v := range data {
+			valchunk[c] = append(valchunk[c], v.Date, v.Name, v.K, v.T, v.Ivol, v.Underlying)
+			datachunk[c] = append(datachunk[c], []interface{}{v.Date, v.Name, v.K, v.T, v.Ivol, v.Underlying})
+			n := (i + 1) % 3000
+			if n == 0 {
+				c++
+			}
 		}
-		sqlStr = sqlStr[:len(sqlStr)-1] + `),`
-		vals = append(vals, row.Date, row.Name, row.K, row.T, row.Ivol)
+		for k, v := range datachunk {
+			subStr := prepareQueryCreateBulk(sqlStr, v, 6)
+			_, err = db.Exec(subStr, valchunk[k]...)
+			if err != nil {
+				panic(err)
+			}
+		}
 	}
-	sqlStr = sqlStr[:len(sqlStr)-1]
-	_, err = db.Exec(sqlStr, vals...)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("done!")
-	// dataMap := map[string][]Data{}
-	// for t := range dates {
-	// 	bar := progressBar(len(tickers))
-	// 	for i := range tickers {
-	// 		bar.Describe(fmt.Sprintf("Processing %v\t", tickers[i].Ticker))
-	// 		var option string
-	// 		url := fmt.Sprintf("https://api.polygon.io/v1/open-close/%v/%v", tickers[i].Ticker, dates[t])
-	// 		contractPx, err := getPolygon(url, TickerLastTrade{})
-	// 		if contractPx.Status != "OK" {
-	// 			bar.Add(1)
-	// 			continue
-	// 		}
-	// 		if err != nil {
-	// 			bar.Add(1)
-	// 			continue
-	// 		}
-	// 		t1, _ := time.Parse(Layout, tickers[i].ExpirationDate)
-	// 		t0, _ := time.Parse(Layout, dates[t])
-	// 		maturity := float64(t1.Unix()-t0.Unix()) / float64(60*60*24*365)
-	// 		underlying, _ := strconv.ParseFloat(px[dates[t]].Close, 64)
-	// 		k := tickers[i].StrikePrice / underlying
-	// 		if (tickers[i].StrikePrice >= underlying && tickers[i].ContractType == "put") || (tickers[i].StrikePrice <= underlying && tickers[i].ContractType == "call") || maturity <= 0.0 || k < 0.5 || k > 2.0 {
-	// 			bar.Add(1)
-	// 			continue
-	// 		}
-	// 		if tickers[i].ContractType == "call" {
-	// 			option = "c"
-	// 		} else {
-	// 			option = "p"
-	// 		}
-	// 		r := 0.03
-	// 		// calculate implied volatility based on black-scholes model
-	// 		ivol := fit(contractPx.Close, tickers[i].StrikePrice, underlying, maturity, 0.0, r, option)
-	// 		// fmt.Println(tickers[i].Ticker, contractPx.Close, k, maturity, ivol)
-	// 		dataMap[dates[t]] = append(dataMap[dates[t]], Data{K: k, T: maturity, Ivol: ivol, Name: tickers[i].Ticker})
-	// 		insertHist := `insert into "HistoricalData"("Date", "Ticker", "K", "T", "Ivol") values($1, $2, $3, $4, $5)`
-	// 		_, err = db.Exec(insertHist, dates[t], tickers[i].Ticker, k, maturity, ivol)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		bar.Add(1)
-	// 	}
-	// }
+	fmt.Println("saved all data!")
 }
 
 func GetHistPx(stock string) (map[string]Hist, error) {
@@ -199,9 +211,25 @@ func GetPastContracts(stock string) ([]TickersPara, error) {
 		return nil, nil
 	}
 
-	// for i := 0; i < len(ticker.Results); i++ {
-	// 	tickers = append(tickers, ticker.Results[i].Ticker)
-	// }
-
 	return ticker.Results, nil
+}
+
+func prepareQueryCreateBulk(s string, models [][]interface{}, n int) string {
+	bf := bytes.Buffer{}
+	for i := range models {
+		numFields := n // the number of fields you are inserting
+		n := i * numFields
+
+		bf.WriteString("(")
+		for j := 0; j < numFields; j++ {
+			bf.WriteString("$")
+			bf.WriteString(strconv.Itoa(n + j + 1))
+			bf.WriteString(", ")
+		}
+		bf.Truncate(bf.Len() - 2)
+		bf.WriteString("), ")
+	}
+	bf.Truncate(bf.Len() - 2)
+
+	return fmt.Sprintf(s, bf.String())
 }
