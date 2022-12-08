@@ -32,11 +32,16 @@ func main() {
 	}
 	defer db.Close()
 
-	for i := 0; i < len(DefaultStocks); i++ {
-		fmt.Printf("Handing %s\n", DefaultStocks[i])
-		data.GetPastContractsDetails(DefaultStocks[i], db)
-		data.FitPastParameters(DefaultStocks[i], db)
+	a, err := data.GetSingleTickers("AAPL")
+	if err != nil {
+		fmt.Println(err)
 	}
+	fmt.Println(a)
+	// for i := 0; i < len(DefaultStocks); i++ {
+	// 	fmt.Printf("Handing %s\n", DefaultStocks[i])
+	// 	data.GetPastContractsDetails(DefaultStocks[i], db)
+	// 	data.FitPastParameters(DefaultStocks[i], db)
+	// }
 
 	// selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
 

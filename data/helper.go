@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/schollz/progressbar/v3"
 	"gonum.org/v1/gonum/optimize"
 	"gonum.org/v1/gonum/stat/distuv"
@@ -15,8 +16,13 @@ import (
 
 // helper function to get the http request and store into struct from polygon.io
 func getPolygon[DataType TickerDetails | Tickers | TickerAggs](url string, target DataType) (result DataType, err error) {
+	err = godotenv.Load()
+	if err != nil {
+		return target, err
+	}
 	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Add("Authorization", `Bearer 3X8wQrb0pH9gaNJvY__sq1UohDdHfVt3`)
+	key := os.Getenv("POLYGON_API_KEY")
+	req.Header.Add("Authorization", fmt.Sprintf(`Bearer %s`, key))
 	if err != nil {
 		return target, err
 	}
@@ -37,9 +43,14 @@ func getPolygon[DataType TickerDetails | Tickers | TickerAggs](url string, targe
 
 // helper function to get the http request and store into struct from alphavantage
 func getAlphavantage[DataType Overview | AlphaData](url string, target DataType) (result DataType, err error) {
+	err = godotenv.Load()
+	if err != nil {
+		return target, err
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	q := req.URL.Query()
-	q.Add("apikey", "0JA1NVBAL8CHYSCH")
+	key := os.Getenv("ALPHAVANTAGE_API_KEY")
+	q.Add("apikey", key)
 	req.URL.RawQuery = q.Encode()
 	if err != nil {
 		return target, err
