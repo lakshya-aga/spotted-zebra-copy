@@ -157,7 +157,10 @@ func IsIn(t time.Time, ts []time.Time) bool {
 	return false
 }
 
-func Format(stocks []string) []string {
+func format(stocks []string) []string {
+	if len(stocks) == 0 {
+		return []string{}
+	}
 	sort.Strings(stocks)
 	for s := 0; s < len(stocks); s++ {
 		stocks[s] = strings.ToUpper(stocks[s])
@@ -180,6 +183,7 @@ func Format(stocks []string) []string {
 }
 
 func Filter(selectStocks, DefaultStocks []string) ([]string, map[string]int, error) {
+	selectStocks = format(selectStocks)
 	stockIndex := map[string]int{}
 	var stocks []string
 	for i, v := range DefaultStocks {

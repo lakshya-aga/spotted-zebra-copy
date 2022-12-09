@@ -1,12 +1,14 @@
 package data
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"main/mc"
 	"math"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/schollz/progressbar/v3"
@@ -188,4 +190,31 @@ func stockIndex(stocks []string) map[string]int {
 		result[v] = k
 	}
 	return result
+}
+
+func UpdateRequired(target string, db *sql.DB, date string) (bool, error) {
+	rows, err := db.Query(fmt.Sprintf(`SELECT DISTINCT "Date" FROM "%s" ORDER BY "Date" DESC`, target))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	var dates []string
+	for rows.Next() {
+		var dt string
+		err = rows.Scan(&dt)
+		if err != nil {
+			return false, err
+		}
+		dates = append(dates, dt)
+	}
+	if len(dates) == 0 {
+		return true, nil
+	}
+	latest, _ := time.Parse(Layout, dates[0])
+	today, _ := time.Parse(Layout, date)
+	if latest.Equal(today) {
+		return false, nil
+	} else {
+		return true, nil
+	}
 }

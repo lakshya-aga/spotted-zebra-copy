@@ -118,3 +118,5 @@ type IvolData struct {
 	Name       string  `json:"Name"`
 	Underlying string  `json:"Underlying"`
 }
+
+const Layout = "2006-01-02"

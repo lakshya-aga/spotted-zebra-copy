@@ -39,10 +39,6 @@ type FCNOutput struct {
 	FixedCoupon   float64            `json:"fixed_coupon_rates"`
 	Price         float64            `json:"price"`
 	FixedPrice    map[string]float64 `json:"fixings"`
-	// Parameter     map[string]mc.Model `json:"model_parameters"`
-	// Index         map[string]int      `json:"corr_id"`
-	// CorrMatrix    []float64           `json:"corr_matrix"`
-	// Mean          []float64           `json:"mean"`
 }
 
 const Layout = "2006-01-02"

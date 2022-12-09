@@ -32,21 +32,25 @@ func FitPastParameters(symbol string, db *sql.DB) {
 
 	ch := make(chan mc.Model, len(data))
 	datesCh := make(chan string, len(data))
+	errCh := make(chan error, len(data))
 	defer close(ch)
 	defer close(datesCh)
+	defer close(errCh)
 
 	for dt, d := range data {
-		go func(date string, data []Data, ch chan mc.Model, datesCh chan string) {
+		go func(date string, data []Data, ch chan mc.Model, datesCh chan string, errCh chan error) {
 			var model mc.Model = mc.NewHypHyp()
 			d, err := loadMktData(data)
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(-1)
+				ch <- nil
+				datesCh <- date
+				errCh <- err
 			}
 			model = mc.Fit(model, d)
 			ch <- model
 			datesCh <- date
-		}(dt, d, ch, datesCh)
+			errCh <- nil
+		}(dt, d, ch, datesCh, errCh)
 	}
 
 	sqlStr := `insert into "BacktestParameters" ("Date", "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho") values %s`
@@ -159,24 +163,24 @@ func GetHistPx(stock string) (map[string]Hist, error) {
 	return px.Hist, nil
 }
 
-func getDates(px map[string]Hist) []string {
-	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
-	tStart := tNow.AddDate(-2, 0, 0)
-	tEnd := tNow.AddDate(0, 0, -1)
-	t := tStart
-	var dates []string
-	for {
-		_, ok := px[t.Format(Layout)]
-		if ok {
-			dates = append(dates, t.Format(Layout))
-		}
-		if tEnd.Sub(t) == 0 {
-			break
-		}
-		t = t.AddDate(0, 0, 1)
-	}
-	return dates
-}
+// func getDates(px map[string]Hist) []string {
+// 	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
+// 	tStart := tNow.AddDate(-2, 0, 0)
+// 	tEnd := tNow.AddDate(0, 0, -1)
+// 	t := tStart
+// 	var dates []string
+// 	for {
+// 		_, ok := px[t.Format(Layout)]
+// 		if ok {
+// 			dates = append(dates, t.Format(Layout))
+// 		}
+// 		if tEnd.Sub(t) == 0 {
+// 			break
+// 		}
+// 		t = t.AddDate(0, 0, 1)
+// 	}
+// 	return dates
+// }
 
 func GetPastContracts(stock string) ([]TickersPara, error) {
 	// initialize the variables
