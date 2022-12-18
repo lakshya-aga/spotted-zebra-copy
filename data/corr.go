@@ -106,7 +106,9 @@ func NewStatistics(stocks []string, db *sql.DB, date string) (map[string]float64
 		}(i, muCh, fixCh, rtCh, stockCh, errCh)
 	}
 
-	for range stocks {
+	bar := progressBar(len(stocks))
+	for i := range stocks {
+		bar.Describe(fmt.Sprintf("Computing the statistics for %v\t", stocks[i]))
 		err := <-errCh
 		if err != nil {
 			return nil, nil, nil, err
@@ -115,6 +117,7 @@ func NewStatistics(stocks []string, db *sql.DB, date string) (map[string]float64
 		mean[s] = <-muCh
 		fixings[s] = <-fixCh
 		rx = append(rx, <-rtCh)
+		bar.Add(1)
 	}
 	corr := corrMatrix(rx)
 
@@ -130,14 +133,14 @@ func NewStatistics(stocks []string, db *sql.DB, date string) (map[string]float64
 				// add data to database
 				_, err = db.Exec(insertCorr, date, stocks[i], stocks[j], corr.At(i, j))
 				if err != nil {
-					panic(err)
+					return nil, nil, nil, err
 				}
 			}
 		}
 		// add data to database
 		_, err = db.Exec(insertStat, date, stocks[i], stocksMap[stocks[i]], mean[stocks[i]], fixings[stocks[i]])
 		if err != nil {
-			panic(err)
+			return nil, nil, nil, err
 		}
 	}
 	return mean, corr, fixings, nil
@@ -181,10 +184,11 @@ func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense,
 	today := time.Now().Format(Layout)
 	update, err := UpdateRequired("CorrPairs", db, today)
 	if err != nil {
-		panic(err)
+		return nil, nil, nil, err
 	}
 
 	if !update {
+		fmt.Println("Retrieving statistics from database")
 		var corr []float64
 		for i := 0; i < len(stocks); i++ {
 			for j := 0; j < len(stocks); j++ {
@@ -193,13 +197,13 @@ func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense,
 				} else if i > j {
 					val, err := getCorr(db, today, stocks[j], stocks[i])
 					if err != nil {
-						panic(err)
+						return nil, nil, nil, err
 					}
 					corr = append(corr, val)
 				} else {
 					val, err := getCorr(db, today, stocks[i], stocks[j])
 					if err != nil {
-						panic(err)
+						return nil, nil, nil, err
 					}
 					corr = append(corr, val)
 				}
@@ -208,15 +212,17 @@ func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense,
 		corrMatrix := mat.NewSymDense(len(stocks), corr)
 		mu, fixings, err := getStats(db, today)
 		if err != nil {
-			panic(err)
+			return nil, nil, nil, err
 		}
 		return mu, corrMatrix, fixings, nil
 	}
 
+	fmt.Println("Computing new statistics")
 	mean, corr, fixings, err := NewStatistics(stocks, db, today)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	fmt.Println("Saved new statistics into database")
 	return mean, corr, fixings, nil
 }
 

@@ -3,10 +3,11 @@ package data
 import (
 	"database/sql"
 	"fmt"
-	"main/mc"
 	"sort"
 	"strconv"
 	"time"
+
+	"main/mc"
 )
 
 func getTickers(stock string) ([]string, error) {
@@ -138,12 +139,11 @@ func getPara(stock string) (mc.Model, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	// fit the contract details to the model, save the model parameters
 	var model mc.Model = mc.NewHypHyp()
 	d, err := loadMktData(data)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 	model = mc.Fit(model, d)
 
@@ -171,16 +171,22 @@ func getModel(db *sql.DB, today string) (map[string]mc.Model, error) {
 
 func newCalibrate(stocks []string, db *sql.DB, date string) (map[string]mc.Model, error) {
 	modelsMap := map[string]mc.Model{}
+	bar := progressBar(len(stocks))
 	for i := range stocks {
-		model, _ := getPara(stocks[i])
+		bar.Describe(fmt.Sprintf("Calibrating parameters for %v\t", stocks[i]))
+		model, err := getPara(stocks[i])
+		if err != nil {
+			return nil, err
+		}
 		modelsMap[stocks[i]] = model
+		bar.Add(1)
 	}
 	insertPar := `insert into "ModelParameters"("Date", "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho") values($1, $2, $3, $4, $5, $6, $7)`
 	for i := 0; i < len(stocks); i++ {
 		pars := modelsMap[stocks[i]].Pars()
 		_, err := db.Exec(insertPar, date, stocks[i], pars[0], pars[1], pars[2], pars[3], pars[4])
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 	return modelsMap, nil
@@ -190,21 +196,24 @@ func Calibrate(stocks []string, db *sql.DB) (map[string]mc.Model, error) {
 	today := time.Now().Format(Layout)
 	update, err := UpdateRequired("ModelParameters", db, today)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if !update {
+		fmt.Println("Retrieving parameters from database")
 		modelsMap, err := getModel(db, today)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		return modelsMap, nil
 	}
 
+	fmt.Println("Calibrating new parameters")
 	modelsMap, err := newCalibrate(stocks, db, today)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Saved new parameters into database")
 	return modelsMap, nil
 }
 

@@ -1,13 +1,14 @@
-package handler
+package mainfuncs
 
 import (
 	"errors"
+	"math"
+	"time"
+
 	"main/data"
 	"main/mc"
 	"main/payoff"
 	"main/utils"
-	"math"
-	"time"
 
 	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/mat"
@@ -50,7 +51,7 @@ func Pricer(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq
 	if err != nil {
 		return math.NaN(), err
 	}
-	
+
 	fcn, err := payoff.NewFCN(stocks, k, cpn, barCpn, fixCpn, ko, ki, kc, T, freq, isEuro, dates)
 	if err != nil {
 		return math.NaN(), err

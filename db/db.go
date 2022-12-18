@@ -7,15 +7,15 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "Louis123"
-	dbname   = "testdb"
-)
+// const (
+// 	host     = "localhost"
+// 	port     = 5432
+// 	user     = "postgres"
+// 	password = "Louis123"
+// 	dbname   = "testdb"
+// )
 
-func ConnectDB() (*sql.DB, error) {
+func ConnectDB(host string, port int, user, password, dbname string) (*sql.DB, error) {
 	// connection string
 	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 

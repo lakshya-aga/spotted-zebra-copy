@@ -1,13 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"main/data"
-	"main/db"
-	"main/handler"
+	"main/handlers"
 	"main/mc"
-	"os"
-	"sort"
+	"main/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 type bskData struct {
@@ -24,44 +22,26 @@ const Layout = "2006-01-02"
 var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NVDA", "AVGO", "QCOM", "INTC"}
 
 func main() {
-	// connect to database
-	db, err := db.ConnectDB()
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
+	r := gin.Default()
 
-	sort.Strings(DefaultStocks)
-	allModels, allMeans, allCorr, allFixings, err := data.Initialize(DefaultStocks, db)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+	admin := r.Group("/admin")
+	{
+		admin.GET("/update", handlers.DailyUpdates)
 	}
 
-	selectStocks := []string{"AAPL", "META", "MSFT", "ABNB"}
-
-	filterStocks, sampleModels, sampleMu, sampleCorr, sampleFixings, err := data.Sampler(DefaultStocks, selectStocks, allModels, allMeans, allCorr, allFixings)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+	registrar := r.Group("/register")
+	{
+		registrar.POST("/users", handlers.Registration)
 	}
 
-	strike := 0.80
-	cpn := 0.10
-	barrierCpn := 0.20
-	fixCpn := 0.20
-	KO := 1.05
-	KI := 0.70
-	KC := 0.80
-	maturity := 3
-	freq := 1
-	isEuro := true
-
-	p, err := handler.Pricer(filterStocks, strike, cpn, barrierCpn, fixCpn, KO, KI, KC, maturity, freq, isEuro, sampleFixings, sampleModels, sampleMu, sampleCorr)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+	v1 := r.Group("/v1")
+	v1.Use(middleware.Authentication)
+	{
+		v1.POST("/pricer", handlers.Pricer)
+		v1.POST("/hi", handlers.Test)
+		// v1.POST("/auth", middleware.Authentication)
 	}
-	fmt.Println(p)
 
+	// Listen and serve on 0.0.0.0:8080
+	r.Run(":8080")
 }
