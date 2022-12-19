@@ -18,14 +18,14 @@ import (
 
 const Layout = "2006-01-02"
 
-func helpers(stocks []string, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense) ([]float64, mc.Basket, *distmv.Normal, distuv.Normal, error) {
-	var pxRatio []float64
+func helpers(stocks []string, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense) (map[string]float64, mc.Basket, *distmv.Normal, distuv.Normal, error) {
+	pxRatio := map[string]float64{}
 	currentPx, err := data.LatestPx(stocks)
 	if err != nil {
 		return nil, nil, nil, distuv.Normal{}, err
 	}
 	for _, v := range stocks {
-		pxRatio = append(pxRatio, currentPx[v]/sampleFixings[v])
+		pxRatio[v] = currentPx[v] / sampleFixings[v]
 	}
 
 	bsk, err := mc.NewBasket(sampleModels)
@@ -67,7 +67,7 @@ func Pricer(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq
 	// Compute path payouts concurrently
 	for l := 0; l < nsamples; l++ {
 		go func(ch chan float64, errCh chan error) {
-			path, err := bsk.Path(dates["mcdates"], pxRatio, dz1, dz2)
+			path, err := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
 			if err != nil {
 				ch <- math.NaN()
 				errCh <- err

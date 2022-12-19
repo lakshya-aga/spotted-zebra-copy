@@ -10,9 +10,21 @@ import (
 	"main/mc"
 )
 
+/*
+get all the available option tickers for each stock
+
+args:
+1. stock : target stock
+
+returns:
+1. slice of available option tickers for the target stock
+2. error
+*/
 func getTickers(stock string) ([]string, error) {
 	// initialize variables
-	var initialUrl string // variable to store the 'next' url in the api response
+	var initialUrl string  // variable to store the 'next' url in the api response
+	var tickerArr []string // variable to store available option tickers
+
 	url := fmt.Sprintf("https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=%v&limit=1000", stock)
 	ticker, err := getPolygon(url, Tickers{})
 	if err != nil {
@@ -37,19 +49,29 @@ func getTickers(stock string) ([]string, error) {
 		}
 	}
 
+	// if there is no available option tickers
 	if len(ticker.Results) == 0 {
 		return []string{}, nil
 	}
 
-	var tickerArr []string
 	for j := range ticker.Results {
 		tickerArr = append(tickerArr, ticker.Results[j].Ticker)
 	}
 	return tickerArr, nil
 }
 
+/*
+get the contract details of all available option tickers
+
+args:
+1. stock : target stock
+
+returns:
+1. slice of contract details of all available option tickers
+2. error
+*/
 func getTickerDetails(stock string) ([]Data, error) {
-	// get the tickerMaps
+	// get the available option tickers
 	data, err := getTickers(stock)
 	if err != nil {
 		return nil, err
@@ -129,16 +151,26 @@ func getTickerDetails(stock string) ([]Data, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return detailsArr, nil
 }
 
+/*
+calibrate the model parameters of target stock
+
+args:
+1. stock : target stock
+
+returns:
+1. model parameters of target stock
+2. error
+*/
 func getPara(stock string) (mc.Model, error) {
 	// get the contract details
 	data, err := getTickerDetails(stock)
 	if err != nil {
 		return nil, err
 	}
+
 	// fit the contract details to the model, save the model parameters
 	var model mc.Model = mc.NewHypHyp()
 	d, err := loadMktData(data)
@@ -146,12 +178,22 @@ func getPara(stock string) (mc.Model, error) {
 		return nil, err
 	}
 	model = mc.Fit(model, d)
-
 	return model, nil
 }
 
-func getModel(db *sql.DB, today string) (map[string]mc.Model, error) {
-	rows, err := db.Query(`SELECT "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho" FROM "ModelParameters" WHERE "Date" IN ($1)`, today)
+/*
+get the model parameter from database
+
+args:
+1. db : target database
+2. date : latest date
+
+returns:
+1. map of model parameters of shortlisted stocks
+2. error
+*/
+func getModel(db *sql.DB, date string) (map[string]mc.Model, error) {
+	rows, err := db.Query(`SELECT "Ticker", "Sigma", "Alpha", "Beta", "Kappa", "Rho" FROM "ModelParameters" WHERE "Date" IN ($1)`, date)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +211,18 @@ func getModel(db *sql.DB, today string) (map[string]mc.Model, error) {
 	return modelsMap, nil
 }
 
+/*
+calibrate new model parameters and save into database
+
+args:
+1. stocks : shortlisted stocks
+2. db : target database
+3. date : latest date
+
+returns:
+1. map of model parameters of shortlisted stocks
+2. error
+*/
 func newCalibrate(stocks []string, db *sql.DB, date string) (map[string]mc.Model, error) {
 	modelsMap := map[string]mc.Model{}
 	bar := progressBar(len(stocks))
@@ -192,13 +246,27 @@ func newCalibrate(stocks []string, db *sql.DB, date string) (map[string]mc.Model
 	return modelsMap, nil
 }
 
+/*
+main handlers for calibrating model parameters
+
+args:
+1. stocks : shortlisted stocks
+2. db : target database
+
+returns:
+1. map of model parameters of shortlisted stocks
+2. error
+*/
 func Calibrate(stocks []string, db *sql.DB) (map[string]mc.Model, error) {
 	today := time.Now().Format(Layout)
+
+	// check if needed to update model parameters
 	update, err := UpdateRequired("ModelParameters", db, today)
 	if err != nil {
 		return nil, err
 	}
 
+	// if update is not required, retrieve model parameters from database
 	if !update {
 		fmt.Println("Retrieving parameters from database")
 		modelsMap, err := getModel(db, today)
@@ -208,6 +276,7 @@ func Calibrate(stocks []string, db *sql.DB) (map[string]mc.Model, error) {
 		return modelsMap, nil
 	}
 
+	// if update is required, calibrate new model parameters and save into database
 	fmt.Println("Calibrating new parameters")
 	modelsMap, err := newCalibrate(stocks, db, today)
 	if err != nil {
@@ -217,6 +286,16 @@ func Calibrate(stocks []string, db *sql.DB) (map[string]mc.Model, error) {
 	return modelsMap, nil
 }
 
+/*
+sample model parameters from shortlisted stocks
+
+args:
+1. stocks : selected stocks
+2. models : map of model parameters of shortlisted stocks
+
+returns:
+1. map of model parameters of selected stocks
+*/
 func ModelSample(stocks []string, models map[string]mc.Model) map[string]mc.Model {
 	result := make(map[string]mc.Model)
 	for i := 0; i < len(stocks); i++ {

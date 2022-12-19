@@ -58,6 +58,7 @@ func Decrypt(key []byte, cryptoText string) string {
 	return string(ciphertext)
 }
 
+// generate api key
 func GenerateToken() (string, string, error) {
 	prefix := make([]byte, 6)
 	_, err := rand.Read(prefix)

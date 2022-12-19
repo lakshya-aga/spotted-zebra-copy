@@ -12,7 +12,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const Layout = "2006-01-02 15:04:05"
+const (
+	Layout = "2006-01-02 15:04:05"
+	DemoKey = "9wz024zA.UxRLCbj9V3xeSv_W"
+)
+
 
 // AuthMiddleware creates a gin middleware for authorization
 func Authentication(c *gin.Context) {

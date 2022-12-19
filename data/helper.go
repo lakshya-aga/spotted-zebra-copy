@@ -192,6 +192,7 @@ func stockIndex(stocks []string) map[string]int {
 	return result
 }
 
+// check if update is required
 func UpdateRequired(target string, db *sql.DB, date string) (bool, error) {
 	rows, err := db.Query(fmt.Sprintf(`SELECT DISTINCT "Date" FROM "%s" ORDER BY "Date" DESC`, target))
 	if err != nil {

@@ -23,6 +23,7 @@ var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NV
 
 func main() {
 	r := gin.Default()
+	// r.SetTrustedProxies([]string{"localhost"})
 
 	admin := r.Group("/admin")
 	{

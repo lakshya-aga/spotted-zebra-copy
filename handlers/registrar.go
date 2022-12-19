@@ -46,7 +46,7 @@ func Registration(c *gin.Context) {
 
 	now := time.Now()
 	exp := now.AddDate(0, 6, 0)
-	// exp := now.Add(1 * time.Second)
+
 	insertDetails := `insert into registrar ("email_address", "prefix", "token", "generated_at", "expired_at", "admin") values ($1, $2, $3, $4, $5, $6)`
 	_, err = db.Exec(insertDetails, details.Email, prefix, hashedApi, now.Format(Layout), exp.Format(Layout), false)
 	if err != nil {

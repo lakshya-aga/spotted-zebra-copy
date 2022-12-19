@@ -14,6 +14,16 @@ import (
 	"gonum.org/v1/gonum/stat"
 )
 
+/*
+get the historical price of target stock
+
+args:
+1. stock : target stock
+
+returns:
+1. map of closing price with corresponding date
+2. error
+*/
 func getHistPx(stock string) (map[string]float64, error) {
 	p := map[string]float64{}
 	px, err := getAlphavantage(fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&outputsize=full&symbol=%v", stock), AlphaData{})
@@ -26,19 +36,45 @@ func getHistPx(stock string) (map[string]float64, error) {
 	return p, nil
 }
 
+/*
+get the returns of target stock
+
+args:
+1. p : historical closing price
+2. refDate : reference date
+
+returns:
+1. slice of returns
+*/
 func getReturns(p map[string]float64, refDate string) []float64 {
 	var px, rt []float64
 	dateArr := dateArr(p, refDate)
 
 	for _, t := range dateArr {
-		px = append(px, p[t.String()])
+		px = append(px, p[t])
 	}
+
 	for c := 0; c < len(px)-1; c++ {
+		if px[c] == 0 {
+			continue
+		}
 		rt = append(rt, math.Log(px[c]/px[c+1]))
 	}
 	return rt
 }
 
+/*
+get the statistics of target stock
+
+args:
+1. stock : target stock
+
+returns:
+1. mean of return
+2. fixing of target stock
+3. slice of return of target stock
+4. error
+*/
 func getTickerStats(stock string) (float64, float64, []float64, error) {
 	px, err := getHistPx(stock)
 	if err != nil {
@@ -51,11 +87,20 @@ func getTickerStats(stock string) (float64, float64, []float64, error) {
 	dateArr := dateArr(px, refDate)
 
 	mu := stat.Mean(rt, nil)
-	fixings := px[dateArr[0].String()]
+	fixings := px[dateArr[0]]
 
 	return mu, fixings, rt, nil
 }
 
+/*
+compute the correlation matrix between shortlisted stocks
+
+args:
+1. rxArr : returns of shortlisted stocks
+
+returns:
+1. correlation matrix of shortlisted stocks
+*/
 func corrMatrix(rxArr [][]float64) *mat.SymDense {
 	// make the slice equal length
 	minLength := minLength(rxArr)
@@ -71,14 +116,41 @@ func corrMatrix(rxArr [][]float64) *mat.SymDense {
 	return corrMatrix
 }
 
-func dateArr(p map[string]float64, refDate string) []reflect.Value {
+/*
+get the date array from reference date
+
+args:
+1. rxArr : returns of shortlisted stocks
+
+returns:
+1. correlation matrix of shortlisted stocks
+*/
+func dateArr(p map[string]float64, refDate string) []string {
+	var dates []string
 	dateArr := reflect.ValueOf(p).MapKeys()
 	sort.Slice(dateArr, func(i, j int) bool { return dateArr[i].String() > dateArr[j].String() })
 	i := sort.Search(len(dateArr), func(i int) bool { return dateArr[i].String() < refDate })
 	dateArr = dateArr[:i]
-	return dateArr
+	for _, t := range dateArr {
+		dates = append(dates, t.String())
+	}
+	return dates
 }
 
+/*
+compute latest statistics of shortlisted stocks
+
+args:
+1. stocks : shortlisted stocks
+2. db : target database
+3. date : latest date
+
+returns:
+1. map of mean for shortlisted stocks
+2. correlation matrix of shortlisted stocks
+3. map of fixings for shortlisted stocks
+4. error
+*/
 func NewStatistics(stocks []string, db *sql.DB, date string) (map[string]float64, *mat.SymDense, map[string]float64, error) {
 	var err error
 	mean := map[string]float64{}
@@ -146,8 +218,20 @@ func NewStatistics(stocks []string, db *sql.DB, date string) (map[string]float64
 	return mean, corr, fixings, nil
 }
 
-func getStats(db *sql.DB, today string) (map[string]float64, map[string]float64, error) {
-	rows, err := db.Query(`SELECT "Ticker", "Mean", "Fixing" FROM "Statistics" WHERE "Date" IN ($1)`, today)
+/*
+get the statistics from database
+
+args:
+1. db : target database
+2. date : latest date
+
+returns:
+1. map of mean of shortlisted stocks
+2. map of fixings of shortlisted stocks
+3. error
+*/
+func getStats(db *sql.DB, date string) (map[string]float64, map[string]float64, error) {
+	rows, err := db.Query(`SELECT "Ticker", "Mean", "Fixing" FROM "Statistics" WHERE "Date" IN ($1)`, date)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,6 +251,19 @@ func getStats(db *sql.DB, today string) (map[string]float64, map[string]float64,
 	return means, fixings, nil
 }
 
+/*
+get the correlation matrix from database
+
+args:
+1. db : target database
+2. date : latest date
+3. x0 : stock 0
+4. x1 : stock 1
+
+returns:
+1. correlation between two stocks
+2. error
+*/
 func getCorr(db *sql.DB, date, x0, x1 string) (float64, error) {
 	var corr float64
 	row := db.QueryRow(`SELECT "Corr" FROM "CorrPairs" WHERE "Date"=$1 AND "X0"=$2 AND "X1"=$3`, date, x0, x1)
@@ -180,6 +277,19 @@ func getCorr(db *sql.DB, date, x0, x1 string) (float64, error) {
 	}
 }
 
+/*
+main handlers for computing statistics
+
+args:
+1. stocks : shortlisted stocks
+2. db : target database
+
+returns:
+1. map of mean for shortlisted stocks
+2. correlation matrix of shortlisted stocks
+3. map of fixings for shortlisted stocks
+4. error
+*/
 func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense, map[string]float64, error) {
 	today := time.Now().Format(Layout)
 	update, err := UpdateRequired("CorrPairs", db, today)
@@ -226,13 +336,28 @@ func Statistics(stocks []string, db *sql.DB) (map[string]float64, *mat.SymDense,
 	return mean, corr, fixings, nil
 }
 
-func StatsSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense, allmu map[string]float64, allspotref map[string]float64) ([]float64, *mat.SymDense, map[string]float64) {
+/*
+sample statistics from shortlisted stocks
+
+args:
+1. stocks : selected stocks
+2. idx : index of stocks in the slice
+3. corrMatrix : correlation matrix of shortlisted stocks
+4. allmu : map of mean of shortlisted stocks
+5. allFixings : map of fixings of shortlisted stocks
+
+returns:
+1. map of mean of selected stocks
+2. correlation matrix of selected stocks
+3. map of fixings of selected stocks
+*/
+func StatsSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense, allmu map[string]float64, allFixings map[string]float64) ([]float64, *mat.SymDense, map[string]float64) {
 	var corr []float64
 	var sampleMu []float64
 	sampleRef := map[string]float64{}
 	for i := range stocks {
 		sampleMu = append(sampleMu, allmu[stocks[i]])
-		sampleRef[stocks[i]] = allspotref[stocks[i]]
+		sampleRef[stocks[i]] = allFixings[stocks[i]]
 		for j := range stocks {
 			if i == j {
 				corr = append(corr, 1.0)
@@ -247,6 +372,16 @@ func StatsSample(stocks []string, idx map[string]int, corrMatrix *mat.SymDense, 
 	return sampleMu, sampleCorr, sampleRef
 }
 
+/*
+get the latest historical price of selected stocks
+
+args:
+1. stocks : selected stocks
+
+returns:
+1. map of latest price of selected stocks
+2. error
+*/
 func LatestPx(stocks []string) (map[string]float64, error) {
 	pxCh := make(chan map[string]float64, len(stocks))
 	stockCh := make(chan string, len(stocks))

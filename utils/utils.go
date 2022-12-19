@@ -1,9 +1,7 @@
 package utils
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -18,21 +16,6 @@ type Holidays struct {
 const Layout = "2006-01-02"
 
 var NYSE = []string{"2022-01-01", "2022-01-17", "2022-02-21", "2022-04-15", "2022-05-30", "2022-06-20", "2022-07-04", "2022-09-05", "2022-11-24", "2022-12-26", "2023-01-02", "2023-01-16", "2023-02-20", "2023-04-07", "2023-05-29", "2023-06-19", "2023-07-04", "2023-09-04", "2023-11-23", "2023-12-25", "2024-01-01", "2024-01-15", "2024-02-19", "2024-07-04", "2024-09-02", "2024-11-28", "2024-12-25"}
-
-func UpcomingHols(exch string) ([]time.Time, error) {
-	var exch_hol []time.Time
-	hols, err := get("https://api.polygon.io/v1/marketstatus/upcoming", []Holidays{})
-	if err != nil {
-		return nil, err
-	}
-	for i := 0; i < len(hols); i++ {
-		if hols[i].Exch == exch && hols[i].Status == "closed" {
-			t, _ := time.Parse(Layout, hols[i].Date)
-			exch_hol = append(exch_hol, t)
-		}
-	}
-	return exch_hol, err
-}
 
 // Convert holidays from string to time.Time format
 func Hols(s []string) ([]time.Time, error) {
@@ -114,27 +97,6 @@ func GenerateDates(start time.Time, tenor, freq int) (map[string][]time.Time, er
 	out["mcdates"] = mcdates
 	out["kodates"] = kodates
 	return out, err
-}
-
-func get[DataType []Holidays](url string, target DataType) (result DataType, err error) {
-	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Add("Authorization", `Bearer 3X8wQrb0pH9gaNJvY__sq1UohDdHfVt3`)
-	if err != nil {
-		return DataType{}, nil
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return DataType{}, nil
-	}
-	defer resp.Body.Close()
-
-	err = json.NewDecoder(resp.Body).Decode(&target)
-	if err != nil {
-		return
-	}
-	result = target
-	return result, nil
 }
 
 // Minimum of a slice
