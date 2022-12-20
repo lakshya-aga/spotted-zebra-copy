@@ -29,15 +29,15 @@ Add request body:
 {
   "stocks": ["AAPL", "META", "MSFT", "TSLA", "AVGO"],
   "strike" : 0.80,
-	"autocall_coupon_rate" : 0.10,
-	"barrier_coupon_rate" : 0.20,
-	"fixed_coupon_rate" : 0.20,
-	"knock_out_barrier" : 1.05,
-	"knock_in_barrier" : 0.70,
-	"coupon_barrier" : 0.80,
-	"maturity" : 3,
-	"frequency" : 1,
-	"isEuro" : false
+  "autocall_coupon_rate" : 0.10,
+  "barrier_coupon_rate" : 0.20,
+  "fixed_coupon_rate" : 0.20,
+  "knock_out_barrier" : 1.05,
+  "knock_in_barrier" : 0.70,
+  "coupon_barrier" : 0.80,
+  "maturity" : 3,
+  "frequency" : 1,
+  "isEuro" : false
 }
 ```
 
