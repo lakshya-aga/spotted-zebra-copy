@@ -3,12 +3,11 @@ package data
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"main/mc"
 	"math"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/schollz/progressbar/v3"
@@ -112,19 +111,6 @@ func fit(p, k, s, T, dy, r float64, option string) float64 {
 	return result
 }
 
-// helper function to create json file
-func createJson[T map[string][]Data | map[string][]string | map[string]mc.Model | Stat](raw T, filename string) error {
-	data, err := json.MarshalIndent(raw, "", " ")
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(filename, data, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // helper function to open tickers.json
 func Open[T Model | []string | Stat](filename string, target T) (T, error) {
 	file, err := os.ReadFile(filename)
@@ -160,20 +146,6 @@ func progressBar(length int) *progressbar.ProgressBar {
 	return bar
 }
 
-// minimum length
-func minLength(data [][]float64) int {
-	min := len(data[0])
-	if len(data) == 1 {
-		return min
-	}
-	for i := 1; i < len(data); i++ {
-		if len(data[i]) < min {
-			min = len(data[i])
-		}
-	}
-	return min
-}
-
 // helper function to open csv file
 func loadMktData(data []Data) ([][]float64, error) {
 	var x [][]float64
@@ -183,39 +155,15 @@ func loadMktData(data []Data) ([][]float64, error) {
 	return x, nil
 }
 
-// get the index of the sorted stocks
-func stockIndex(stocks []string) map[string]int {
-	result := map[string]int{}
-	for k, v := range stocks {
-		result[v] = k
-	}
-	return result
-}
-
-// check if update is required
-func UpdateRequired(target string, db *sql.DB, date string) (bool, error) {
-	rows, err := db.Query(fmt.Sprintf(`SELECT DISTINCT "Date" FROM "%s" ORDER BY "Date" DESC`, target))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	var dates []string
-	for rows.Next() {
-		var dt string
-		err = rows.Scan(&dt)
-		if err != nil {
-			return false, err
-		}
-		dates = append(dates, dt)
-	}
-	if len(dates) == 0 {
-		return true, nil
-	}
-	latest, _ := time.Parse(Layout, dates[0])
-	today, _ := time.Parse(Layout, date)
-	if latest.Equal(today) {
-		return false, nil
-	} else {
-		return true, nil
+func LatestDate(target string, db *sql.DB) (string, error) {
+	var date string
+	row := db.QueryRow(fmt.Sprintf(`SELECT DISTINCT "Date" FROM "%s" ORDER BY "Date" DESC LIMIT 1`, target))
+	switch err := row.Scan(&date); err {
+	case sql.ErrNoRows:
+		return "", errors.New("no rows were returned")
+	case nil:
+		return date, nil
+	default:
+		return "", err
 	}
 }

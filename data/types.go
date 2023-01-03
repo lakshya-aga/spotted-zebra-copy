@@ -1,6 +1,6 @@
 package data
 
-import "main/mc"
+import "github.com/banachtech/spotted-zebra/mc"
 
 type TickersArr struct {
 	Tickers []string `json:"tickers"`

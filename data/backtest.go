@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"main/mc"
+	"github.com/banachtech/spotted-zebra/mc"
 	"os"
 	"strconv"
 	"time"
@@ -163,25 +163,6 @@ func GetHistPx(stock string) (map[string]Hist, error) {
 	return px.Hist, nil
 }
 
-// func getDates(px map[string]Hist) []string {
-// 	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
-// 	tStart := tNow.AddDate(-2, 0, 0)
-// 	tEnd := tNow.AddDate(0, 0, -1)
-// 	t := tStart
-// 	var dates []string
-// 	for {
-// 		_, ok := px[t.Format(Layout)]
-// 		if ok {
-// 			dates = append(dates, t.Format(Layout))
-// 		}
-// 		if tEnd.Sub(t) == 0 {
-// 			break
-// 		}
-// 		t = t.AddDate(0, 0, 1)
-// 	}
-// 	return dates
-// }
-
 func GetPastContracts(stock string) ([]TickersPara, error) {
 	// initialize the variables
 	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
@@ -237,3 +218,15 @@ func prepareQueryCreateBulk(s string, models [][]interface{}, n int) string {
 
 	return fmt.Sprintf(s, bf.String())
 }
+
+// func BackTest(stocks []string, db *sql.DB, date string)  {
+// 	modelsMap, _ := Calibrate(db, date)
+// 	// if err != nil {
+// 	// 	return nil, nil, nil, nil, err
+// 	// }
+// 	models := ModelSample(stocks, modelsMap)
+// 	mean, corr, fixings, _ := Statistics(stocks, db, date)
+// 	// if err != nil {
+// 	// 	return nil, nil, nil, nil, err
+// 	// }
+// }

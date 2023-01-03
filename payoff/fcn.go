@@ -43,7 +43,7 @@ type FCNOutput struct {
 
 const Layout = "2006-01-02"
 
-func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, m map[string][]time.Time) (*FCN, error) {
+func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, m map[string][]time.Time) *FCN {
 	var kidates []time.Time
 	if isEuro {
 		kidates = []time.Time{m["mcdates"][len(m["mcdates"])-1]}
@@ -66,7 +66,7 @@ func NewFCN(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq
 		KODates:       m["kodates"],
 		KIDates:       kidates,
 	}
-	return &f, nil
+	return &f
 }
 
 func (f *FCN) Payout(path []float64) float64 {

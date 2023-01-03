@@ -1,4 +1,4 @@
-package utils
+package util
 
 import (
 	"errors"
@@ -81,6 +81,12 @@ func ListBusinessDates(start time.Time, end time.Time, hols []time.Time) ([]time
 // Frequency (freq) and tenor arguments are in number of months.
 func GenerateDates(start time.Time, tenor, freq int) (map[string][]time.Time, error) {
 	out := make(map[string][]time.Time, 2)
+	if freq <= 0 || tenor <= 0 {
+		return nil, errors.New("maturity or frequency cannot be 0")
+	}
+	if tenor < freq {
+		return nil, errors.New("maturity must be greater than frequency")
+	}
 	n := tenor / freq
 	kodates := make([]time.Time, n)
 	hols, err := Hols(NYSE)
@@ -144,21 +150,20 @@ func format(stocks []string) []string {
 	return unique
 }
 
-func Filter(selectStocks, DefaultStocks []string) ([]string, map[string]int, error) {
+func Filter(selectStocks, DefaultStocks []string) ([]string, error) {
 	selectStocks = format(selectStocks)
-	stockIndex := map[string]int{}
 	var stocks []string
-	for i, v := range DefaultStocks {
+	for _, v := range DefaultStocks {
 		for j := range selectStocks {
 			if v == selectStocks[j] {
-				stockIndex[v] = i
 				stocks = append(stocks, v)
 			}
 		}
 	}
 	if len(stocks) == 0 {
 		err := errors.New("there is no available stocks")
-		return nil, nil, err
+		return nil, err
 	}
-	return stocks, stockIndex, nil
+	sort.Strings(stocks)
+	return stocks, nil
 }

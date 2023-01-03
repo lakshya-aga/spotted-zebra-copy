@@ -1,0 +1,195 @@
+package api
+
+import (
+	"database/sql"
+	"fmt"
+	"math"
+	"net/http"
+	"sort"
+	"time"
+
+	db "github.com/banachtech/spotted-zebra/db/sqlc"
+	"github.com/banachtech/spotted-zebra/mc"
+	"github.com/banachtech/spotted-zebra/payoff"
+	"github.com/banachtech/spotted-zebra/util"
+	"github.com/gin-gonic/gin"
+	"gonum.org/v1/gonum/mat"
+	"gonum.org/v1/gonum/stat"
+)
+
+func (server *Server) backtest(c *gin.Context) {
+	var req pricerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if len(req.Stocks) == 0 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": "Error JSON binding, please check your JSON input"})
+		return
+	}
+	if req.Maturity < req.Freq {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": "Maturity cannot be less than frequency"})
+		return
+	}
+	sort.Strings(DefaultStocks)
+
+	filterStocks, err := util.Filter(req.Stocks, DefaultStocks)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed filter stocks: %v", err)})
+		return
+	}
+	req.Stocks = filterStocks
+
+	result, err := server.store.GetBacktestValues(c)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.AbortWithStatusJSON(http.StatusNotFound, errorResponse(err))
+			return
+		}
+
+		c.AbortWithStatusJSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	dates, models, fixings, means, corrMatrix := backtestConstructor(result, filterStocks)
+
+	prices := map[string]float64{}
+	var profit []float64
+	for t := range dates {
+		p, err := fcnPricer(filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN price: %s", err)})
+			return
+		}
+		prices[dates[t]] = p
+
+		payout, err := fcnPayout(dates[t], filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN payout: %s", err)})
+			return
+		}
+		pnl := payout - p
+		profit = append(profit, pnl)
+	}
+
+	mean, std := stat.MeanStdDev(profit, nil)
+	min, max := minmax(profit)
+
+	c.JSON(http.StatusOK, gin.H{"contract": req, "mean": mean, "std": std, "min": min, "max": max})
+}
+
+func backtestConstructor(target db.GetBacktestValuesResult, filterStocks []string) ([]string, map[string]map[string]mc.Model, map[string]map[string]float64, map[string]map[string]float64, map[string]*mat.SymDense) {
+	params := target.Params
+	stats := target.Stats
+	corr := target.Corrpair
+	dates := target.Date
+
+	models := map[string]map[string]mc.Model{}
+	for i := range params {
+		_, ok := models[params[i].Ticker]
+		if !ok {
+			models[params[i].Ticker] = map[string]mc.Model{}
+		}
+		models[params[i].Ticker][params[i].Date] = mc.HypHyp{Sigma: params[i].Sigma, Alpha: params[i].Alpha, Beta: params[i].Beta, Kappa: params[i].Kappa, Rho: params[i].Rho}
+	}
+
+	fixings := map[string]map[string]float64{}
+	means := map[string]map[string]float64{}
+	for i := range stats {
+		_, ok1 := fixings[stats[i].Ticker]
+		if !ok1 {
+			fixings[stats[i].Ticker] = map[string]float64{}
+		}
+		_, ok2 := means[stats[i].Ticker]
+		if !ok2 {
+			means[stats[i].Ticker] = map[string]float64{}
+		}
+		fixings[stats[i].Ticker][stats[i].Date] = stats[i].Fixing
+		means[stats[i].Ticker][stats[i].Date] = stats[i].Mean
+	}
+
+	corrpair := map[string]map[string]map[string]float64{}
+	for i := range corr {
+		_, ok1 := corrpair[corr[i].X0]
+		if !ok1 {
+			corrpair[corr[i].X0] = map[string]map[string]float64{}
+		}
+		_, ok2 := corrpair[corr[i].X0][corr[i].Date]
+		if !ok2 {
+			corrpair[corr[i].X0][corr[i].Date] = map[string]float64{}
+		}
+		corrpair[corr[i].X0][corr[i].Date][corr[i].X1] = corr[i].Corr
+	}
+	sampleModels := map[string]map[string]mc.Model{}
+	sampleFixings := map[string]map[string]float64{}
+	sampleMeans := map[string]map[string]float64{}
+	corrs := map[string][]float64{}
+	sampleCorr := map[string]*mat.SymDense{}
+	for t := range dates {
+		sampleModels[dates[t]] = map[string]mc.Model{}
+		sampleFixings[dates[t]] = map[string]float64{}
+		sampleMeans[dates[t]] = map[string]float64{}
+		for i := range filterStocks {
+			sampleModels[dates[t]][filterStocks[i]] = models[filterStocks[i]][dates[t]]
+			sampleFixings[dates[t]][filterStocks[i]] = fixings[filterStocks[i]][dates[t]]
+			sampleMeans[dates[t]][filterStocks[i]] = means[filterStocks[i]][dates[t]]
+			for j := range filterStocks {
+				if i == j {
+					corrs[dates[t]] = append(corrs[dates[t]], 1.0)
+				} else if i < j {
+					corrs[dates[t]] = append(corrs[dates[t]], corrpair[filterStocks[i]][dates[t]][filterStocks[j]])
+				} else {
+					corrs[dates[t]] = append(corrs[dates[t]], corrpair[filterStocks[j]][dates[t]][filterStocks[i]])
+				}
+			}
+		}
+	}
+
+	for k, v := range corrs {
+		sampleCorr[k] = mat.NewSymDense(len(filterStocks), v)
+	}
+
+	return dates, sampleModels, sampleFixings, sampleMeans, sampleCorr
+}
+
+func fcnPayout(date string, stocks []string, arg pricerRequest, fixings, means, px map[string]float64, models map[string]mc.Model, corrMatrix *mat.SymDense) (float64, error) {
+	pxRatio := map[string]float64{}
+	var mu []float64
+	for _, v := range stocks {
+		pxRatio[v] = px[v] / fixings[v]
+		mu = append(mu, means[v])
+	}
+
+	bsk := mc.NewBasket(models)
+
+	dz1, dz2, err := distributions(mu, corrMatrix)
+	if err != nil {
+		return math.NaN(), err
+	}
+
+	tNow, _ := time.Parse(Layout, date)
+	dates, err := util.GenerateDates(tNow, arg.Maturity, arg.Freq)
+	if err != nil {
+		return math.NaN(), err
+	}
+
+	fcn := payoff.NewFCN(stocks, arg.Strike, arg.Cpn, arg.BarrierCpn, arg.FixCpn, arg.KO, arg.KI, arg.KC, arg.Maturity, arg.Freq, arg.IsEuro, dates)
+	path := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
+	wop := wop(fixings, dates, path)
+	x := fcn.Payout(wop)
+	return x, nil
+}
+
+func minmax(array []float64) (float64, float64) {
+	max := array[0]
+	min := array[0]
+	for _, value := range array {
+		if max < value {
+			max = value
+		}
+		if min > value {
+			min = value
+		}
+	}
+	return min, max
+}

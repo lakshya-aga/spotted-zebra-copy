@@ -1,14 +1,15 @@
 package mainfuncs
 
 import (
+	"database/sql"
 	"errors"
 	"math"
 	"time"
 
-	"main/data"
-	"main/mc"
-	"main/payoff"
-	"main/utils"
+	"github.com/banachtech/spotted-zebra/data"
+	"github.com/banachtech/spotted-zebra/mc"
+	"github.com/banachtech/spotted-zebra/payoff"
+	"github.com/banachtech/spotted-zebra/util"
 
 	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/mat"
@@ -18,20 +19,18 @@ import (
 
 const Layout = "2006-01-02"
 
-func helpers(stocks []string, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense) (map[string]float64, mc.Basket, *distmv.Normal, distuv.Normal, error) {
+func helpers(stocks []string, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense, db *sql.DB) (map[string]float64, mc.Basket, *distmv.Normal, distuv.Normal, error) {
 	pxRatio := map[string]float64{}
-	currentPx, err := data.LatestPx(stocks)
+	currentPx, err := data.LatestPx(stocks, db)
 	if err != nil {
 		return nil, nil, nil, distuv.Normal{}, err
 	}
+
 	for _, v := range stocks {
 		pxRatio[v] = currentPx[v] / sampleFixings[v]
 	}
 
-	bsk, err := mc.NewBasket(sampleModels)
-	if err != nil {
-		return nil, nil, nil, distuv.Normal{}, err
-	}
+	bsk := mc.NewBasket(sampleModels)
 
 	dz1, dz2, err := distributions(sampleMu, sampleCorr)
 	if err != nil {
@@ -40,22 +39,19 @@ func helpers(stocks []string, sampleFixings map[string]float64, sampleModels map
 	return pxRatio, bsk, dz1, dz2, nil
 }
 
-func Pricer(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense) (float64, error) {
-	pxRatio, bsk, dz1, dz2, err := helpers(stocks, sampleFixings, sampleModels, sampleMu, sampleCorr)
+func Pricer(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense, db *sql.DB) (float64, error) {
+	pxRatio, bsk, dz1, dz2, err := helpers(stocks, sampleFixings, sampleModels, sampleMu, sampleCorr, db)
 	if err != nil {
 		return math.NaN(), err
 	}
 
 	tNow, _ := time.Parse(Layout, time.Now().Format(Layout))
-	dates, err := utils.GenerateDates(tNow, T, freq)
+	dates, err := util.GenerateDates(tNow, T, freq)
 	if err != nil {
 		return math.NaN(), err
 	}
 
-	fcn, err := payoff.NewFCN(stocks, k, cpn, barCpn, fixCpn, ko, ki, kc, T, freq, isEuro, dates)
-	if err != nil {
-		return math.NaN(), err
-	}
+	fcn := payoff.NewFCN(stocks, k, cpn, barCpn, fixCpn, ko, ki, kc, T, freq, isEuro, dates)
 
 	nsamples := 10000
 	out := 0.0
@@ -67,12 +63,8 @@ func Pricer(stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq
 	// Compute path payouts concurrently
 	for l := 0; l < nsamples; l++ {
 		go func(ch chan float64, errCh chan error) {
-			path, err := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
-			if err != nil {
-				ch <- math.NaN()
-				errCh <- err
-				return
-			}
+			path := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
+
 			wop := wop(sampleFixings, dates, path)
 			x := fcn.Payout(wop)
 			ch <- x
@@ -113,8 +105,29 @@ func wop(px map[string]float64, dates map[string][]time.Time, path mc.MCPath) []
 			p[j] = path[k][i]
 			j++
 		}
-		minP := utils.MinSlice(p)
+		minP := util.MinSlice(p)
 		wop = append(wop, minP)
 	}
 	return wop
+}
+
+func Payout(date string, stocks []string, k, cpn, barCpn, fixCpn, ko, ki, kc float64, T, freq int, isEuro bool, sampleFixings map[string]float64, sampleModels map[string]mc.Model, sampleMu []float64, sampleCorr *mat.SymDense, db *sql.DB) (float64, error) {
+	pxRatio, bsk, dz1, dz2, err := helpers(stocks, sampleFixings, sampleModels, sampleMu, sampleCorr, db)
+	if err != nil {
+		return math.NaN(), err
+	}
+
+	tNow, _ := time.Parse(Layout, date)
+	dates, err := util.GenerateDates(tNow, T, freq)
+	if err != nil {
+		return math.NaN(), err
+	}
+
+	fcn := payoff.NewFCN(stocks, k, cpn, barCpn, fixCpn, ko, ki, kc, T, freq, isEuro, dates)
+
+	path := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
+
+	wop := wop(sampleFixings, dates, path)
+	x := fcn.Payout(wop)
+	return x, nil
 }

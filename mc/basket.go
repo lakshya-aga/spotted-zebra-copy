@@ -28,7 +28,7 @@ type BasketList struct {
 	SpotPrice  map[string]float64 `json:"spot_price"`
 }
 
-func (b Basket) Path(stocks []string, obsdates []time.Time, pxRatio map[string]float64, d *distmv.Normal, d2 distuv.Normal) (MCPath, error) {
+func (b Basket) Path(stocks []string, obsdates []time.Time, pxRatio map[string]float64, d *distmv.Normal, d2 distuv.Normal) MCPath {
 	nAssets := len(b)
 	n := len(obsdates) - 1
 
@@ -51,18 +51,17 @@ func (b Basket) Path(stocks []string, obsdates []time.Time, pxRatio map[string]f
 	for _, v := range b {
 		x[v.Ticker] = v.Model.Path(pxRatio[v.Ticker], dt, z[v.Ticker], d2)
 	}
-	return x, nil
+	return x
 }
 
 // Constructor for basket
-func NewBasket(modelsMap map[string]Model) (Basket, error) {
+func NewBasket(modelsMap map[string]Model) Basket {
 	var b Basket
 
 	// Lookup calibrated model parameters
 	for k, v := range modelsMap {
-		//m, err = utils.GetModel(v)
 		b = append(b, Stock{Ticker: k, Model: v})
 		sort.Slice(b, func(i, j int) bool { return b[i].Ticker <= b[j].Ticker })
 	}
-	return b, nil
+	return b
 }

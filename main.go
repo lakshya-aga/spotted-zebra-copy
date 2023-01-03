@@ -1,48 +1,28 @@
 package main
 
 import (
-	"main/handlers"
-	"main/mc"
-	"main/middleware"
+	"database/sql"
+	"log"
 
-	"github.com/gin-gonic/gin"
+	"github.com/banachtech/spotted-zebra/api"
+	db "github.com/banachtech/spotted-zebra/db/sqlc"
+	"github.com/banachtech/spotted-zebra/util"
+	_ "github.com/lib/pq"
 )
 
-type bskData struct {
-	Stocks     []string             `json:"stocks"`
-	Models     map[string]mc.HypHyp `json:"model_parameters"`
-	CorrID     map[string]int       `json:"corr_id"`
-	Mean       []float64            `json:"mean"`
-	CorrMatrix []float64            `json:"corr_matrix"`
-	SpotPrice  map[string]float64   `json:"spot_price"`
-}
-
-const Layout = "2006-01-02"
-
-var DefaultStocks = []string{"AAPL", "AMZN", "META", "MSFT", "TSLA", "GOOG", "NVDA", "AVGO", "QCOM", "INTC"}
-
 func main() {
-	r := gin.Default()
-	// r.SetTrustedProxies([]string{"localhost"})
-
-	admin := r.Group("/admin")
-	{
-		admin.GET("/update", handlers.DailyUpdates)
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		log.Fatal("cannot load configuration:", err)
 	}
-
-	registrar := r.Group("/register")
-	{
-		registrar.POST("/users", handlers.Registration)
+	conn, err := sql.Open(config.DBDriver, config.DBSource)
+	if err != nil {
+		log.Fatal("cannot connect to db:", err)
 	}
-
-	v1 := r.Group("/v1")
-	v1.Use(middleware.Authentication)
-	{
-		v1.POST("/pricer", handlers.Pricer)
-		v1.POST("/hi", handlers.Test)
-		// v1.POST("/auth", middleware.Authentication)
+	store := db.NewStore(conn)
+	server := api.NewServer(store)
+	err = server.Start(config.ServerAddress)
+	if err != nil {
+		log.Fatal("cannot start server:", err)
 	}
-
-	// Listen and serve on 0.0.0.0:8080
-	r.Run(":8080")
 }
