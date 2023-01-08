@@ -19,7 +19,7 @@ const (
 )
 
 // AuthMiddleware creates a gin middleware for authorization
-func (server *Server) Authentication(c *gin.Context) {
+func (server *Server) authentication(c *gin.Context) {
 	authorizationHeader := c.GetHeader(authorizationHeaderKey)
 
 	if len(authorizationHeader) == 0 {

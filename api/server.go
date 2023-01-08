@@ -24,7 +24,7 @@ func NewServer(store db.Store) *Server {
 func (server *Server) setupRouter() {
 	router := gin.Default()
 
-	authRoutes := router.Group("/v1").Use(server.Authentication)
+	authRoutes := router.Group("/v1").Use(server.authentication)
 	authRoutes.POST("/pricer", server.pricer)
 	authRoutes.POST("/backtest", server.backtest)
 	server.router = router
