@@ -69,14 +69,14 @@ func NewHypHyp() HypHyp {
 // Get transformed parameters. Return parameters transformed to the domain (-Inf, Inf).
 func (m HypHyp) Get() []float64 {
 	p := make([]float64, 5)
-	p[0], p[1], p[2], p[3] = math.Log(m.Sigma), math.Log(m.Alpha), math.Log((2.0*m.Beta-1.0)/(3.0*(2.0*m.Beta))), math.Log(m.Kappa) //math.Log((2.0*m.Alpha-1.0)/(3.0-(2*m.Alpha)))
+	p[0], p[1], p[2], p[3] = math.Log(m.Sigma), math.Log(m.Alpha), math.Log(m.Beta), math.Log(m.Kappa) //math.Log((2.0*m.Alpha-1.0)/(3.0-(2*m.Alpha)))
 	p[4] = math.Atanh(m.Rho)
 	return p
 }
 
 // Create a model for the given transformed parameters
 func (m HypHyp) Set(p []float64) Model {
-	m.Sigma, m.Alpha, m.Beta, m.Kappa = math.Exp(p[0]), math.Exp(p[1]), 1.0/2.0+1.0/(1.0+math.Exp(-p[2])), math.Exp(p[3]) //1.0/2.0+1.0/(1.0+math.Exp(-p[1]))
+	m.Sigma, m.Alpha, m.Beta, m.Kappa = math.Exp(p[0]), math.Exp(p[1]), math.Exp(p[2]), math.Exp(p[3]) //1.0/2.0+1.0/(1.0+math.Exp(-p[1]))
 	m.Rho = math.Tanh(p[4])
 	return m
 }
