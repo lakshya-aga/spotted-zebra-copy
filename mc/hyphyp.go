@@ -48,6 +48,7 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, d distuv.Normal) []float
 		u = f * g / x
 		r[i+1] = r[i] - a*dt[i]*u*u + m.Sigma*u*math.Sqrt(dt[i])*z1[i]
 		y = y*math.Exp(-m.Kappa*dt[i]) + m.Alpha*math.Sqrt(1.0-math.Exp(-2.0*m.Kappa*dt[i]))*z2[i] //*math.Sqrt(dt[i])
+		y = math.Max(0, y)
 	}
 	// Convert log price to price
 	for i, v := range r {
