@@ -54,22 +54,53 @@ func (server *Server) backtest(c *gin.Context) {
 	dates, models, fixings, means, corrMatrix := backtestConstructor(result, filterStocks)
 
 	prices := map[string]float64{}
+	errCh := make(chan error, len(dates))
+	pnlCh := make(chan float64, len(dates))
+	defer close(errCh)
+	defer close(pnlCh)
 	var profit []float64
 	for t := range dates {
-		p, err := fcnPricer(filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN price: %s", err)})
-			return
-		}
-		prices[dates[t]] = p
+		go func(t int) {
+			fmt.Println(t)
+			p, err := fcnPricer(filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
+			if err != nil {
+				errCh <- err
+				pnlCh <- math.NaN()
+				return
+			}
+			// if err != nil {
+			// 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN price: %s", err)})
+			// 	return
+			// }
+			prices[dates[t]] = p
 
-		payout, err := fcnPayout(dates[t], filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
+			payout, err := fcnPayout(dates[t], filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
+			if err != nil {
+				errCh <- err
+				pnlCh <- math.NaN()
+				return
+			}
+			// if err != nil {
+			// 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN payout: %s", err)})
+			// 	return
+			// }
+			pnl := payout - p
+			errCh <- nil
+			pnlCh <- pnl
+			// profit = append(profit, pnl)
+		}(t)
+	}
+
+	for range dates {
+		err := <-errCh
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN payout: %s", err)})
 			return
 		}
-		pnl := payout - p
-		profit = append(profit, pnl)
+		pnl := <-pnlCh
+		if !math.IsNaN(pnl) {
+			profit = append(profit, pnl)
+		}
 	}
 
 	mean, std := stat.MeanStdDev(profit, nil)

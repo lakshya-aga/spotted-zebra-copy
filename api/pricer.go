@@ -169,12 +169,12 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 
 	// Compute path payouts concurrently
 	for l := 0; l < nsamples; l++ {
-		go func(ch chan float64) {
+		go func(l int) {
 			path := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
 			wop := wop(fixings, dates, path)
 			x := fcn.Payout(wop)
 			ch <- x
-		}(ch)
+		}(l)
 	}
 
 	for l := 0; l < nsamples; l++ {
