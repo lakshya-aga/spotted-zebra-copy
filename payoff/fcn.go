@@ -1,9 +1,7 @@
 package payoff
 
 import (
-	"encoding/json"
 	"math"
-	"os"
 	"time"
 )
 
@@ -110,33 +108,4 @@ func (f *FCN) Payout(path []float64) float64 {
 	}
 	dt := float64(f.ObsDates[T].Unix()-f.ObsDates[0].Unix()) / float64(60*60*24*365)
 	return math.Exp(-0.03*dt) * out
-}
-
-func (f *FCN) Save(filename string, price float64, spotref map[string]float64) error {
-	output := FCNOutput{
-		StrikeDate:    time.Now().Format(Layout),
-		Tickers:       f.Tickers,
-		Strike:        f.Strike,
-		Maturity:      f.Maturity,
-		CallFreq:      f.CallFreq,
-		IsEuro:        f.IsEuroKI,
-		KO:            f.KO,
-		KI:            f.KI,
-		KC:            f.KC,
-		AutoCoupon:    f.Coupon,
-		BarrierCoupon: f.BarrierCoupon,
-		FixedCoupon:   f.FixedCoupon,
-		Price:         price,
-		FixedPrice:    spotref,
-	}
-
-	data, err := json.MarshalIndent(output, "", " ")
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(filename, data, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
 }
