@@ -2,8 +2,6 @@ package mc
 
 import (
 	"math"
-
-	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // Define HypHyp model.
@@ -14,7 +12,7 @@ type HypHyp struct {
 // Simulate a HypHyp model price path for a given vector of timesteps and stock price normal variates.
 // The normal variates are used when it is required to generated correlated price paths of two or more assets.
 // For a single price path z1 should be nil.
-func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, d distuv.Normal) []float64 {
+func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, z2 []float64) []float64 {
 	var f, g, y, u, x float64
 	N := len(dt)
 	// Initialise price path
@@ -27,18 +25,18 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, d distuv.Normal) []float
 	// Initialise Std Normal generator
 	// d := distuv.Normal{Mu: 0.0, Sigma: 1.0, Src: rand.NewSource(uint64(time.Now().UnixNano()))}
 	// We need two correlated std normal variates for path simulation. If the normal variate for the stock price SDE is not given, generate it here.
-	if z1 == nil {
-		z1 = make([]float64, N)
-		for i := 0; i < N; i++ {
-			z1[i] = d.Rand()
-		}
-	}
+	// if z1 == nil {
+	// 	z1 = make([]float64, N)
+	// 	for i := 0; i < N; i++ {
+	// 		z1[i] = d.Rand()
+	// 	}
+	// }
 	// Generate the state variable SDE normal variate
-	z2 := make([]float64, N)
-	for i := range z2 {
-		z2[i] = m.Rho*z1[i]*math.Sqrt(dt[i]) + math.Sqrt(1.0-m.Rho*m.Rho)*math.Sqrt(dt[i])*d.Rand()
-		// fmt.Println(z1[i], z2[i])
-	}
+	// z2 := make([]float64, N)
+	// for i := range z2 {
+	// 	z2[i] = m.Rho*z1[i] + math.Sqrt(1.0-m.Rho*m.Rho)*d.Rand()
+	// 	// fmt.Println(z1[i], z2[i])
+	// }
 
 	// Generate Euler-Mauryama path for log price
 	for i := 0; i < N; i++ {
@@ -47,7 +45,7 @@ func (m HypHyp) Path(pxRatio float64, dt, z1 []float64, d distuv.Normal) []float
 		g = y + math.Sqrt(y*y+1.0)
 		u = f * g / x
 		r[i+1] = r[i] - a*dt[i]*u*u + m.Sigma*u*math.Sqrt(dt[i])*z1[i]
-		y = y*math.Exp(-m.Kappa*dt[i]) + m.Alpha*math.Sqrt(1.0-math.Exp(-2.0*m.Kappa*dt[i]))*z2[i] //*math.Sqrt(dt[i])
+		y = y*math.Exp(-m.Kappa*dt[i]) + m.Alpha*math.Sqrt(1.0-math.Exp(-2.0*m.Kappa*dt[i]))*z2[i]*math.Sqrt(dt[i]) //*math.Sqrt(dt[i])
 		y = math.Max(0, y)
 	}
 	// Convert log price to price

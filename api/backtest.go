@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -56,41 +57,45 @@ func (server *Server) backtest(c *gin.Context) {
 	prices := map[string]float64{}
 	errCh := make(chan error, len(dates))
 	pnlCh := make(chan float64, len(dates))
+	dateCh := make(chan string, len(dates))
+	defer close(dateCh)
 	defer close(errCh)
 	defer close(pnlCh)
 	var profit []float64
 	for t := range dates {
 		go func(t int) {
-			fmt.Println(t)
 			p, err := fcnPricer(filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
 			if err != nil {
 				errCh <- err
 				pnlCh <- math.NaN()
+				dateCh <- dates[t]
 				return
 			}
-			// if err != nil {
-			// 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN price: %s", err)})
-			// 	return
-			// }
+
 			prices[dates[t]] = p
 
 			payout, err := fcnPayout(dates[t], filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
 			if err != nil {
 				errCh <- err
 				pnlCh <- math.NaN()
+				dateCh <- dates[t]
 				return
 			}
-			// if err != nil {
-			// 	c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": fmt.Sprintf("Failed compute FCN payout: %s", err)})
-			// 	return
-			// }
+
 			pnl := payout - p
+			if math.IsNaN(pnl) {
+				errCh <- errors.New("return is NaN")
+				pnlCh <- math.NaN()
+				dateCh <- dates[t]
+				return
+			}
 			errCh <- nil
 			pnlCh <- pnl
-			// profit = append(profit, pnl)
+			dateCh <- dates[t]
 		}(t)
 	}
 
+	rollout := map[string]float64{}
 	for range dates {
 		err := <-errCh
 		if err != nil {
@@ -101,12 +106,21 @@ func (server *Server) backtest(c *gin.Context) {
 		if !math.IsNaN(pnl) {
 			profit = append(profit, pnl)
 		}
+		date := <-dateCh
+		rollout[date] = pnl
 	}
+
+	var sortedRet []float64
+	for t := range dates {
+		sortedRet = append(sortedRet, rollout[dates[t]])
+	}
+
+	maxRollout := maxRollout(sortedRet)
 
 	mean, std := stat.MeanStdDev(profit, nil)
 	min, max := minmax(profit)
 
-	c.JSON(http.StatusOK, gin.H{"contract": req, "mean": mean, "std": std, "min": min, "max": max})
+	c.JSON(http.StatusOK, gin.H{"mean": mean, "std": std, "min": min, "max": max, "max_rollout": maxRollout})
 }
 
 func backtestConstructor(target db.GetBacktestValuesResult, filterStocks []string) ([]string, map[string]map[string]mc.Model, map[string]map[string]float64, map[string]map[string]float64, map[string]*mat.SymDense) {
@@ -204,8 +218,31 @@ func fcnPayout(date string, stocks []string, arg pricerRequest, fixings, means, 
 		return math.NaN(), err
 	}
 
+	n_sims := len(dates["mcdates"]) - 1
+	z1 := map[string][]float64{}
+	z2 := map[string][]float64{}
+	rhos := map[string]float64{}
+	for k, v := range models {
+		rho := v.Pars()[4]
+		rhos[k] = rho
+	}
+
+	for _, v := range stocks {
+		z1[v] = make([]float64, n_sims)
+		z2[v] = make([]float64, n_sims)
+	}
+
+	// r := make([]float64, len(stocks))
+	for k := 0; k < n_sims; k++ {
+		r := dz1.Rand(nil)
+		for i := range stocks {
+			z1[stocks[i]][k] = r[i]
+			z2[stocks[i]][k] = rhos[stocks[i]]*r[i] + math.Sqrt(1.0-rhos[stocks[i]]*rhos[stocks[i]])*dz2.Rand()
+		}
+	}
+
 	fcn := payoff.NewFCN(stocks, arg.Strike, arg.Cpn, arg.BarrierCpn, arg.FixCpn, arg.KO, arg.KI, arg.KC, arg.Maturity, arg.Freq, arg.IsEuro, dates)
-	path := bsk.Path(stocks, dates["mcdates"], pxRatio, dz1, dz2)
+	path := bsk.Path(stocks, dates["mcdates"], pxRatio, z1, z2)
 	wop := wop(fixings, dates, path)
 	x := fcn.Payout(wop)
 	return x, nil
@@ -223,4 +260,23 @@ func minmax(array []float64) (float64, float64) {
 		}
 	}
 	return min, max
+}
+
+func maxRollout(array []float64) float64 {
+	var rollout []float64
+	x := make([]float64, len(array)+1)
+	x[0] = 1.0
+	for i := 0; i < len(array); i++ {
+		x[i+1] = x[i] * (1.0 + array[i])
+	}
+	for i := 1; i < len(x); i++ {
+		xt := x[i]
+		xPrev := x[:i]
+		_, maxPrevX := minmax(xPrev)
+		r := xt/maxPrevX - 1
+		rollout = append(rollout, r)
+	}
+	fmt.Println(rollout)
+	maxR, _ := minmax(rollout)
+	return maxR
 }
