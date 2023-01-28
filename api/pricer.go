@@ -164,10 +164,11 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 	n_sims := len(dates["mcdates"]) - 1
 	z1 := map[int]map[string][]float64{}
 	z2 := map[int]map[string][]float64{}
-	rhos := map[string]float64{}
+	rhos := map[string][]float64{}
 	for k, v := range models {
 		rho := v.Pars()[4]
-		rhos[k] = rho
+		rhos[k] = append(rhos[k], rho)
+		rhos[k] = append(rhos[k], math.Sqrt(1.0-rho*rho))
 	}
 	for l := 0; l < nsamples; l++ {
 		z1[l] = map[string][]float64{}
@@ -181,61 +182,10 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 			r := dz1.Rand(nil)
 			for i := range stocks {
 				z1[l][stocks[i]][k] = r[i]
-				z2[l][stocks[i]][k] = rhos[stocks[i]]*r[i] + math.Sqrt(1.0-rhos[stocks[i]]*rhos[stocks[i]])*dz2.Rand()
+				z2[l][stocks[i]][k] = rhos[stocks[i]][0]*r[i] + rhos[stocks[i]][1]*dz2.Rand()
 			}
 		}
 	}
-
-	// z1Ch := make(chan []float64, nsamples*n_sims)
-	// z2Ch := make(chan []float64, nsamples*n_sims)
-	// defer close(z1Ch)
-	// defer close(z2Ch)
-
-	// for l := 0; l < nsamples*n_sims; l++ {
-	// 	go func() {
-	// 		r := make([]float64, len(stocks))
-	// 		z := make([]float64, len(stocks))
-	// 		for k := 0; k < n_sims; k++ {
-	// 			r = dz1.Rand(r)
-	// 			for s := 0; s < len(stocks); s++ {
-	// 				z = append(z, dz2.Rand())
-	// 			}
-	// 		}
-	// 		z2Ch <- z
-	// 		z1Ch <- r
-	// 	}()
-	// }
-
-	// for l := 0; l < nsamples; l++ {
-	// 	z1[l] = map[string][]float64{}
-	// 	z2[l] = map[string][]float64{}
-	// 	for _, v := range stocks {
-	// 		z1[l][v] = make([]float64, n_sims)
-	// 	}
-	// 	for k := 0; k < n_sims; k++ {
-	// 		r := <-z1Ch
-	// 		for i := range stocks {
-	// 			z1[l][stocks[i]][k] = r[i]
-	// 		}
-	// 	}
-
-	// 	for _, v := range stocks {
-	// 		z2[l][v] = make([]float64, n_sims)
-	// 	}
-	// 	for k := 0; k < n_sims; k++ {
-	// 		r := <-z2Ch
-	// 		for i := range stocks {
-	// 			z2[l][stocks[i]][k] = r[i]
-	// 		}
-	// 	}
-
-	// 	for i := range stocks {
-	// 		rho := models[stocks[i]].Pars()[4]
-	// 		for k := 0; k < n_sims; k++ {
-	// 			z2[l][stocks[i]][k] = rho*z1[l][stocks[i]][k] + math.Sqrt(1.0-rho*rho)*z2[l][stocks[i]][k]
-	// 		}
-	// 	}
-	// }
 
 	fcn := payoff.NewFCN(stocks, arg.Strike, arg.Cpn, arg.BarrierCpn, arg.FixCpn, arg.KO, arg.KI, arg.KC, arg.Maturity, arg.Freq, arg.IsEuro, dates)
 
