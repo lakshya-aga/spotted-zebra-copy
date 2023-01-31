@@ -70,6 +70,6 @@ func (server *Server) authentication(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse(errors.New("please input a valid API Key")))
 		return
 	}
-
+	
 	c.Next()
 }

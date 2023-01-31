@@ -221,23 +221,17 @@ func fcnPayout(date string, stocks []string, arg pricerRequest, fixings, means, 
 	n_sims := len(dates["mcdates"]) - 1
 	z1 := map[string][]float64{}
 	z2 := map[string][]float64{}
-	rhos := map[string]float64{}
-	for k, v := range models {
-		rho := v.Pars()[4]
-		rhos[k] = rho
-	}
 
 	for _, v := range stocks {
 		z1[v] = make([]float64, n_sims)
 		z2[v] = make([]float64, n_sims)
 	}
 
-	// r := make([]float64, len(stocks))
 	for k := 0; k < n_sims; k++ {
 		r := dz1.Rand(nil)
 		for i := range stocks {
 			z1[stocks[i]][k] = r[i]
-			z2[stocks[i]][k] = rhos[stocks[i]]*r[i] + math.Sqrt(1.0-rhos[stocks[i]]*rhos[stocks[i]])*dz2.Rand()
+			z2[stocks[i]][k] = dz2.Rand()
 		}
 	}
 
@@ -276,7 +270,6 @@ func maxRollout(array []float64) float64 {
 		r := xt/maxPrevX - 1
 		rollout = append(rollout, r)
 	}
-	fmt.Println(rollout)
 	maxR, _ := minmax(rollout)
 	return maxR
 }

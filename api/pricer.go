@@ -164,12 +164,7 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 	n_sims := len(dates["mcdates"]) - 1
 	z1 := map[int]map[string][]float64{}
 	z2 := map[int]map[string][]float64{}
-	rhos := map[string][]float64{}
-	for k, v := range models {
-		rho := v.Pars()[4]
-		rhos[k] = append(rhos[k], rho)
-		rhos[k] = append(rhos[k], math.Sqrt(1.0-rho*rho))
-	}
+
 	for l := 0; l < nsamples; l++ {
 		z1[l] = map[string][]float64{}
 		z2[l] = map[string][]float64{}
@@ -182,7 +177,7 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 			r := dz1.Rand(nil)
 			for i := range stocks {
 				z1[l][stocks[i]][k] = r[i]
-				z2[l][stocks[i]][k] = rhos[stocks[i]][0]*r[i] + rhos[stocks[i]][1]*dz2.Rand()
+				z2[l][stocks[i]][k] = dz2.Rand()
 			}
 		}
 	}

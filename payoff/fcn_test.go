@@ -75,7 +75,3 @@ func TestNewFCN(t *testing.T) {
 		})
 	}
 }
-
-func TestFCNPayout(t *testing.T) {
-	
-}
