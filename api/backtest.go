@@ -115,12 +115,12 @@ func (server *Server) backtest(c *gin.Context) {
 		sortedRet = append(sortedRet, rollout[dates[t]])
 	}
 
-	maxRollout := maxRollout(sortedRet)
+	maxDrawDown := maxDrawDown(sortedRet)
 
 	mean, std := stat.MeanStdDev(profit, nil)
 	min, max := minmax(profit)
 
-	c.JSON(http.StatusOK, gin.H{"mean": mean, "std": std, "min": min, "max": max, "max_rollout": maxRollout})
+	c.JSON(http.StatusOK, gin.H{"mean": mean, "std": std, "min": min, "max": max, "max_drawdown": maxDrawDown})
 }
 
 func backtestConstructor(target db.GetBacktestValuesResult, filterStocks []string) ([]string, map[string]map[string]mc.Model, map[string]map[string]float64, map[string]map[string]float64, map[string]*mat.SymDense) {
@@ -256,7 +256,7 @@ func minmax(array []float64) (float64, float64) {
 	return min, max
 }
 
-func maxRollout(array []float64) float64 {
+func maxDrawDown(array []float64) float64 {
 	var rollout []float64
 	x := make([]float64, len(array)+1)
 	x[0] = 1.0
