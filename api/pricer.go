@@ -44,7 +44,7 @@ func getPricerLimiter(userID string) *rate.Limiter {
 	limiter, ok := Pricerlimiters[userID]
 	if !ok {
 		// Create a new rate limiter for the user if it doesn't exist
-		limiter = rate.NewLimiter(rate.Every(time.Second), 5) // 5 requests per 10 seconds
+		limiter = rate.NewLimiter(rate.Every(time.Second), 5) // 5 requests per second
 		Pricerlimiters[userID] = limiter
 	}
 	return limiter

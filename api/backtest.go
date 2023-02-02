@@ -20,16 +20,13 @@ import (
 	"gonum.org/v1/gonum/stat"
 )
 
-// // Limiter is a global rate limiter for all users
-// var BacktestLimiter = rate.NewLimiter(5, 1) // 5 requests per second
-
 var Backtestlimiters = make(map[string]*rate.Limiter)
 
 func getBacktestLimiter(userID string) *rate.Limiter {
 	limiter, ok := Pricerlimiters[userID]
 	if !ok {
 		// Create a new rate limiter for the user if it doesn't exist
-		limiter = rate.NewLimiter(rate.Every(time.Second), 2) // 5 requests per 10 seconds
+		limiter = rate.NewLimiter(rate.Every(time.Second), 2) // 2 requests per second
 		Pricerlimiters[userID] = limiter
 	}
 	return limiter
