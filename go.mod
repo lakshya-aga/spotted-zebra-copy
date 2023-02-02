@@ -10,6 +10,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 	golang.org/x/exp v0.0.0-20230108222341-4b8118a2686a
+	golang.org/x/time v0.3.0
 	gonum.org/v1/gonum v0.12.0
 )
 

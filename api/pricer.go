@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	db "github.com/banachtech/spotted-zebra/db/sqlc"
@@ -15,6 +16,7 @@ import (
 	"github.com/banachtech/spotted-zebra/util"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/rand"
+	"golang.org/x/time/rate"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat/distmv"
 	"gonum.org/v1/gonum/stat/distuv"
@@ -36,8 +38,35 @@ type pricerRequest struct {
 
 const Layout = "2006-01-02"
 
+var Pricerlimiters = make(map[string]*rate.Limiter)
+
+func getPricerLimiter(userID string) *rate.Limiter {
+	limiter, ok := Pricerlimiters[userID]
+	if !ok {
+		// Create a new rate limiter for the user if it doesn't exist
+		limiter = rate.NewLimiter(rate.Every(time.Second), 5) // 5 requests per 10 seconds
+		Pricerlimiters[userID] = limiter
+	}
+	return limiter
+}
+
 func (server *Server) pricer(c *gin.Context) {
 	var req pricerRequest
+
+	prefix, exists := c.Get("prefix")
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": "Authentication Error"})
+		return
+	}
+
+	limiter := getPricerLimiter(prefix.(string))
+
+	// Check if the user has exceeded the rate limit
+	if !limiter.Allow() {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"status": http.StatusTooManyRequests, "msg": "Too Many Requests"})
+		return
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -140,6 +169,7 @@ func constructor(target db.GetValuesResult, filterStocks []string) (map[string]m
 }
 
 func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string]float64, models map[string]mc.Model, corrMatrix *mat.SymDense) (float64, error) {
+	var wg sync.WaitGroup
 	pxRatio := map[string]float64{}
 	var mu []float64
 	for _, v := range stocks {
@@ -186,17 +216,22 @@ func fcnPricer(stocks []string, arg pricerRequest, fixings, means, px map[string
 
 	out := 0.0
 	ch := make(chan float64, nsamples)
-	defer close(ch)
+	// defer close(ch)
 
 	// Compute path payouts concurrently
 	for l := 0; l < nsamples; l++ {
+		wg.Add(1)
 		go func(l int) {
+			defer wg.Done()
 			path := bsk.Path(stocks, dates["mcdates"], pxRatio, z1[l], z2[l])
 			wop := wop(fixings, dates, path)
 			x := fcn.Payout(wop)
 			ch <- x
 		}(l)
 	}
+
+	wg.Wait()
+	close(ch)
 
 	for l := 0; l < nsamples; l++ {
 		out += <-ch

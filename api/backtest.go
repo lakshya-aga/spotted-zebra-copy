@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	db "github.com/banachtech/spotted-zebra/db/sqlc"
@@ -14,12 +15,44 @@ import (
 	"github.com/banachtech/spotted-zebra/payoff"
 	"github.com/banachtech/spotted-zebra/util"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 )
 
+// // Limiter is a global rate limiter for all users
+// var BacktestLimiter = rate.NewLimiter(5, 1) // 5 requests per second
+
+var Backtestlimiters = make(map[string]*rate.Limiter)
+
+func getBacktestLimiter(userID string) *rate.Limiter {
+	limiter, ok := Pricerlimiters[userID]
+	if !ok {
+		// Create a new rate limiter for the user if it doesn't exist
+		limiter = rate.NewLimiter(rate.Every(time.Second), 2) // 5 requests per 10 seconds
+		Pricerlimiters[userID] = limiter
+	}
+	return limiter
+}
+
 func (server *Server) backtest(c *gin.Context) {
 	var req pricerRequest
+	var wg sync.WaitGroup
+
+	prefix, exists := c.Get("prefix")
+	if !exists {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": http.StatusBadRequest, "msg": "Authentication Error"})
+		return
+	}
+
+	limiter := getBacktestLimiter(prefix.(string))
+
+	// Check if the user has exceeded the rate limit
+	if !limiter.Allow() {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"status": http.StatusTooManyRequests, "msg": "Too Many Requests"})
+		return
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -54,16 +87,18 @@ func (server *Server) backtest(c *gin.Context) {
 
 	dates, models, fixings, means, corrMatrix := backtestConstructor(result, filterStocks)
 
-	prices := map[string]float64{}
+	// prices := map[string]float64{}
 	errCh := make(chan error, len(dates))
 	pnlCh := make(chan float64, len(dates))
 	dateCh := make(chan string, len(dates))
-	defer close(dateCh)
-	defer close(errCh)
-	defer close(pnlCh)
+	// defer close(dateCh)
+	// defer close(errCh)
+	// defer close(pnlCh)
 	var profit []float64
 	for t := range dates {
+		wg.Add(1)
 		go func(t int) {
+			defer wg.Done()
 			p, err := fcnPricer(filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
 			if err != nil {
 				errCh <- err
@@ -72,7 +107,7 @@ func (server *Server) backtest(c *gin.Context) {
 				return
 			}
 
-			prices[dates[t]] = p
+			// prices[dates[t]] = p
 
 			payout, err := fcnPayout(dates[t], filterStocks, req, fixings[dates[t]], means[dates[t]], fixings[dates[t]], models[dates[t]], corrMatrix[dates[t]])
 			if err != nil {
@@ -94,6 +129,11 @@ func (server *Server) backtest(c *gin.Context) {
 			dateCh <- dates[t]
 		}(t)
 	}
+
+	wg.Wait()
+	close(dateCh)
+	close(errCh)
+	close(pnlCh)
 
 	rollout := map[string]float64{}
 	for range dates {
