@@ -23,11 +23,11 @@ import (
 var Backtestlimiters = make(map[string]*rate.Limiter)
 
 func getBacktestLimiter(userID string) *rate.Limiter {
-	limiter, ok := Pricerlimiters[userID]
+	limiter, ok := Backtestlimiters[userID]
 	if !ok {
 		// Create a new rate limiter for the user if it doesn't exist
 		limiter = rate.NewLimiter(rate.Every(time.Second), 2) // 2 requests per second
-		Pricerlimiters[userID] = limiter
+		Backtestlimiters[userID] = limiter
 	}
 	return limiter
 }
